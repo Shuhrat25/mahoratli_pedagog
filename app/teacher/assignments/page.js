@@ -1,0 +1,154 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { assignmentsApi, ApiError } from "@/lib/api";
+import Modal from "@/components/Modal";
+import KebabMenu from "@/components/KebabMenu";
+import { Icon, paths } from "@/components/icons";
+
+export default function TeacherAssignmentsPage() {
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [maxScore, setMaxScore] = useState(100);
+  const [dueDate, setDueDate] = useState("");
+  const [formError, setFormError] = useState("");
+
+  function reload() {
+    return assignmentsApi.list().then(({ assignments }) => setAssignments(assignments));
+  }
+
+  useEffect(() => {
+    reload().finally(() => setLoading(false));
+  }, []);
+
+  const rows = useMemo(() => {
+    let list = assignments.filter((a) => a.title.toLowerCase().includes(search.toLowerCase()));
+    if (statusFilter !== "all") {
+      list = list.filter((a) => {
+        const closed = new Date(a.dueDate) < new Date();
+        return statusFilter === "closed" ? closed : !closed;
+      });
+    }
+    return list;
+  }, [assignments, search, statusFilter]);
+
+  if (loading) return <div className="text-slate-400">Yuklanmoqda...</div>;
+
+  function openCreate() {
+    setEditing(null);
+    setTitle("");
+    setDescription("");
+    setMaxScore(100);
+    setDueDate("");
+    setFormError("");
+    setOpen(true);
+  }
+  function openEdit(a) {
+    setEditing(a);
+    setTitle(a.title);
+    setDescription(a.description);
+    setMaxScore(a.maxScore);
+    setDueDate(a.dueDate?.slice(0, 16) || "");
+    setFormError("");
+    setOpen(true);
+  }
+  async function save(e) {
+    e.preventDefault();
+    if (!description.trim() && !editing?.materials?.length) {
+      setFormError("Tavsif yoki materiallardan kamida bittasi to'ldirilishi shart");
+      return;
+    }
+    try {
+      const payload = { title, description, maxScore, dueDate };
+      if (editing) await assignmentsApi.update(editing.id, payload);
+      else await assignmentsApi.create({ ...payload, steps: [] });
+      await reload();
+      setOpen(false);
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : "Xatolik yuz berdi");
+    }
+  }
+  async function remove(id) {
+    if (!window.confirm("Vazifa o'chirilsinmi?")) return;
+    await assignmentsApi.remove(id);
+    await reload();
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold">Vazifalar</h1>
+        <button onClick={openCreate} className="btn-primary">
+          <Icon path={paths.plus} className="h-4 w-4" /> Vazifa yaratish
+        </button>
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Icon path={paths.search} className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Qidirish..." className="input pl-9" />
+        </div>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input w-auto">
+          <option value="all">Barchasi</option>
+          <option value="open">Ochiq</option>
+          <option value="closed">Yopilgan</option>
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        {rows.map((a) => {
+          const closed = new Date(a.dueDate) < new Date();
+          const notReviewed = a.submissions.filter((s) => s.status === "NOT_REVIEWED").length;
+          return (
+            <div key={a.id} className="card flex items-center gap-3 p-4">
+              <Link href={`/teacher/assignments/${a.id}`} className="min-w-0 flex-1">
+                <p className="font-medium">{a.title}</p>
+                <p className="text-xs text-slate-500">
+                  Max: {a.maxScore} · {a.submissions.length} javob{notReviewed > 0 && ` · ${notReviewed} tekshirilmagan`}
+                </p>
+              </Link>
+              <span className={`badge shrink-0 ${closed ? "bg-slate-100 text-slate-500 dark:bg-slate-800" : "bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300"}`}>
+                {closed ? "Yopilgan" : "Ochiq"}
+              </span>
+              <KebabMenu onEdit={() => openEdit(a)} onDelete={() => remove(a.id)} />
+            </div>
+          );
+        })}
+      </div>
+
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? "Vazifani tahrirlash" : "Vazifa yaratish"} wide>
+        <form onSubmit={save} className="space-y-3">
+          <div>
+            <label className="label">Nomi</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} className="input" required />
+          </div>
+          <div>
+            <label className="label">Tavsif</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="input" rows={4} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Maksimal baho</label>
+              <input type="number" value={maxScore} onChange={(e) => setMaxScore(e.target.value)} className="input" required />
+            </div>
+            <div>
+              <label className="label">Muddat</label>
+              <input type="datetime-local" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="input" required />
+            </div>
+          </div>
+          {formError && <p className="text-sm text-red-600">{formError}</p>}
+          <button type="submit" className="btn-primary w-full">
+            Saqlash
+          </button>
+        </form>
+      </Modal>
+    </div>
+  );
+}

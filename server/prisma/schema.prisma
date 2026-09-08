@@ -1,0 +1,263 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite (dev) does not support native enums, so role/type/status fields are
+// plain strings validated against the constants in src/lib/constants.js.
+// PostgreSQL (prod) migration can reintroduce native enums if desired.
+
+model User {
+  id           String   @id @default(cuid())
+  role         String   @default("STUDENT")
+  login        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  university   String?
+  email        String   @unique
+  points       Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  posts        Post[]
+  comments     Comment[]
+  postLikes    PostLike[]
+  pollVotes    PollVote[]
+  lessonProgress LessonProgress[]
+  submissions  Submission[]
+  materials    Material[]
+  forumThreads ForumThread[]
+  forumReplies ForumReply[]
+  uploadedFiles UploadedFile[]
+}
+
+model EmailVerification {
+  id        String   @id @default(cuid())
+  email     String
+  codeHash  String
+  purpose   String
+  verified  Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Banner {
+  id      String        @id @default(cuid())
+  title   String
+  text    String
+  color   String
+  order   Int           @default(0)
+  imageId String?
+  image   UploadedFile? @relation(fields: [imageId], references: [id])
+}
+
+// Blog-uslubidagi post: sarlavha majburiy, qolgan hammasi ixtiyoriy —
+// tavsif matni, rasm YOKI YouTube video havolasi (dars videosi kabi).
+model Post {
+  id        String    @id @default(cuid())
+  authorId  String
+  author    User      @relation(fields: [authorId], references: [id])
+  title     String
+  text      String?
+  videoUrl  String?
+  imageId   String?
+  image     UploadedFile? @relation(fields: [imageId], references: [id])
+  createdAt DateTime  @default(now())
+  likes     PostLike[]
+  comments  Comment[]
+}
+
+model PostLike {
+  id     String @id @default(cuid())
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  text      String
+  createdAt DateTime @default(now())
+}
+
+model Poll {
+  id        String       @id @default(cuid())
+  question  String
+  multiple  Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  options   PollOption[]
+}
+
+model PollOption {
+  id      String     @id @default(cuid())
+  pollId  String
+  poll    Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  text    String
+  correct Boolean    @default(false)
+  order   Int        @default(0)
+  votes   PollVote[]
+}
+
+model PollVote {
+  id           String     @id @default(cuid())
+  pollOptionId String
+  option       PollOption @relation(fields: [pollOptionId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  createdAt    DateTime   @default(now())
+
+  @@unique([pollOptionId, userId])
+}
+
+model Topic {
+  id      String   @id @default(cuid())
+  title   String
+  order   Int      @default(0)
+  lessons Lesson[]
+}
+
+model Lesson {
+  id        String     @id @default(cuid())
+  topicId   String
+  topic     Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  title     String
+  type      String
+  videoUrl  String?
+  content   String?
+  order     Int        @default(0)
+  questions Question[]
+  progress  LessonProgress[]
+}
+
+model Question {
+  id       String           @id @default(cuid())
+  lessonId String
+  lesson   Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  text     String
+  order    Int              @default(0)
+  options  QuestionOption[]
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  correct    Boolean  @default(false)
+  order      Int      @default(0)
+}
+
+model LessonProgress {
+  id          String    @id @default(cuid())
+  lessonId    String
+  lesson      Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  completed   Boolean   @default(false)
+  score       Int?
+  completedAt DateTime?
+
+  @@unique([lessonId, userId])
+}
+
+model Assignment {
+  id          String            @id @default(cuid())
+  title       String
+  description String
+  maxScore    Int
+  dueDate     DateTime
+  createdAt   DateTime          @default(now())
+  steps       AssignmentStep[]
+  materials   AssignmentMaterial[]
+  submissions Submission[]
+}
+
+model AssignmentStep {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  title        String
+  text         String
+  order        Int        @default(0)
+}
+
+model AssignmentMaterial {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  fileId       String
+  file         UploadedFile @relation(fields: [fileId], references: [id])
+}
+
+model Submission {
+  id           String            @id @default(cuid())
+  assignmentId String
+  assignment   Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      User              @relation(fields: [studentId], references: [id])
+  fileId       String
+  file         UploadedFile      @relation(fields: [fileId], references: [id])
+  submittedAt  DateTime          @default(now())
+  score        Int?
+  comment      String?
+  status       String            @default("NOT_REVIEWED")
+
+  @@unique([assignmentId, studentId])
+}
+
+model Material {
+  id         String       @id @default(cuid())
+  title      String
+  fileId     String
+  file       UploadedFile @relation(fields: [fileId], references: [id])
+  uploadedById String
+  uploadedBy   User       @relation(fields: [uploadedById], references: [id])
+  uploadedAt DateTime     @default(now())
+}
+
+model ForumThread {
+  id        String        @id @default(cuid())
+  title     String
+  authorId  String
+  author    User          @relation(fields: [authorId], references: [id])
+  createdAt DateTime      @default(now())
+  replies   ForumReply[]
+}
+
+model ForumReply {
+  id        String      @id @default(cuid())
+  threadId  String
+  thread    ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User        @relation(fields: [authorId], references: [id])
+  text      String
+  createdAt DateTime    @default(now())
+}
+
+model UploadedFile {
+  id           String   @id @default(cuid())
+  originalName String
+  storedName   String
+  mimeType     String
+  size         Int
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  assignmentMaterials AssignmentMaterial[]
+  submissions         Submission[]
+  materials           Material[]
+  banners             Banner[]
+  posts               Post[]
+}
