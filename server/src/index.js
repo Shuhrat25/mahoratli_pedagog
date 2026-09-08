@@ -32,7 +32,9 @@ app.use(
   cors({
     origin(origin, callback) {
       if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      callback(new Error(`CORS: ${origin} ruxsat etilmagan`));
+      const err = new Error(`CORS: ${origin} ruxsat etilmagan (CLIENT_ORIGIN ro'yxatida yo'q)`);
+      err.isCorsRejection = true;
+      callback(err);
     },
     credentials: true,
   })
@@ -59,6 +61,9 @@ app.use((req, res) => res.status(404).json({ error: "Topilmadi" }));
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error(err);
+  if (err.isCorsRejection) {
+    return res.status(403).json({ error: err.message });
+  }
   if (err.name === "MulterError") {
     return res.status(400).json({ error: `Fayl yuklashda xato: ${err.message}` });
   }
