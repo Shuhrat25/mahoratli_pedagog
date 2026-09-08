@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/auth-context";
-import { UNIVERSITIES } from "@/lib/mockData";
 import ThemeToggle from "@/components/ThemeToggle";
 
 export default function StudentProfilePage() {
@@ -72,14 +71,7 @@ export default function StudentProfilePage() {
             </div>
             <div>
               <label className="label">Universitet</label>
-              <select value={university} onChange={(e) => setUniversity(e.target.value)} className="input">
-                <option value="">Tanlanmagan</option>
-                {UNIVERSITIES.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
+              <input value={university} onChange={(e) => setUniversity(e.target.value)} className="input" />
             </div>
             <div>
               <label className="label">Elektron pochta</label>

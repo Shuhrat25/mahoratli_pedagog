@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
-import { UNIVERSITIES } from "@/lib/mockData";
 
 const emptyForm = { firstName: "", lastName: "", email: "", login: "", university: "", role: "STUDENT", password: "" };
 
@@ -37,14 +36,7 @@ export default function ParticipantModal({ open, onClose, onSave, initial, allow
         </div>
         <div>
           <label className="label">Universitet</label>
-          <select value={form.university} onChange={(e) => setForm({ ...form, university: e.target.value })} className="input">
-            <option value="">Tanlanmagan</option>
-            {UNIVERSITIES.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </select>
+          <input value={form.university} onChange={(e) => setForm({ ...form, university: e.target.value })} className="input" />
         </div>
         <div>
           <label className="label">Elektron pochta</label>

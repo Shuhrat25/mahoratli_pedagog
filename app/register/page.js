@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/auth-context";
-import { UNIVERSITIES } from "@/lib/mockData";
 import { authApi, ApiError } from "@/lib/api";
 
 export default function RegisterPage() {
@@ -116,14 +115,12 @@ export default function RegisterPage() {
             </div>
             <div>
               <label className="label">Universitet / institut (ixtiyoriy)</label>
-              <select value={university} onChange={(e) => setUniversity(e.target.value)} className="input">
-                <option value="">Tanlanmagan</option>
-                {UNIVERSITIES.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
+              <input
+                value={university}
+                onChange={(e) => setUniversity(e.target.value)}
+                className="input"
+                placeholder="Masalan: Toshkent davlat pedagogika universiteti"
+              />
             </div>
             <div>
               <label className="label">Parol</label>
