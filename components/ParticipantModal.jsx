@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Modal from "@/components/Modal";
+import UniversityAutocomplete from "@/components/UniversityAutocomplete";
 
 const emptyForm = { firstName: "", lastName: "", email: "", login: "", university: "", role: "STUDENT", password: "" };
 
@@ -36,7 +37,11 @@ export default function ParticipantModal({ open, onClose, onSave, initial, allow
         </div>
         <div>
           <label className="label">Universitet</label>
-          <input value={form.university} onChange={(e) => setForm({ ...form, university: e.target.value })} className="input" />
+          <UniversityAutocomplete
+            value={form.university}
+            onChange={(v) => setForm({ ...form, university: v })}
+            placeholder="Nomi yoki qisqartmasini yozing (masalan: TDTU)"
+          />
         </div>
         <div>
           <label className="label">Elektron pochta</label>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useApp } from "@/lib/auth-context";
 import ThemeToggle from "@/components/ThemeToggle";
+import UniversityAutocomplete from "@/components/UniversityAutocomplete";
 
 export default function StudentProfilePage() {
   const { currentUser, updateMe } = useApp();
@@ -71,7 +72,11 @@ export default function StudentProfilePage() {
             </div>
             <div>
               <label className="label">Universitet</label>
-              <input value={university} onChange={(e) => setUniversity(e.target.value)} className="input" />
+              <UniversityAutocomplete
+                value={university}
+                onChange={setUniversity}
+                placeholder="Nomi yoki qisqartmasini yozing (masalan: TDTU)"
+              />
             </div>
             <div>
               <label className="label">Elektron pochta</label>

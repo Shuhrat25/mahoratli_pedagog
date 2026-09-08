@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/auth-context";
 import { authApi, ApiError } from "@/lib/api";
+import UniversityAutocomplete from "@/components/UniversityAutocomplete";
 
 export default function RegisterPage() {
   const { register, isLoginTaken } = useApp();
@@ -115,11 +116,10 @@ export default function RegisterPage() {
             </div>
             <div>
               <label className="label">Universitet / institut (ixtiyoriy)</label>
-              <input
+              <UniversityAutocomplete
                 value={university}
-                onChange={(e) => setUniversity(e.target.value)}
-                className="input"
-                placeholder="Masalan: Toshkent davlat pedagogika universiteti"
+                onChange={setUniversity}
+                placeholder="Nomi yoki qisqartmasini yozing (masalan: TDTU)"
               />
             </div>
             <div>
