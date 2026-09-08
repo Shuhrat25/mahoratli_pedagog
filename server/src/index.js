@@ -20,7 +20,23 @@ const fileRoutes = require("./routes/files");
 
 const app = express();
 
-app.use(cors({ origin: process.env.CLIENT_ORIGIN, credentials: true }));
+// CLIENT_ORIGIN bir nechta manzilni vergul bilan ajratib qabul qiladi —
+// masalan lokal frontend (http://localhost:3000) va productiondagi Vercel
+// domeni bir vaqtda ishlashi uchun.
+const allowedOrigins = (process.env.CLIENT_ORIGIN || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS: ${origin} ruxsat etilmagan`));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(cookieParser());
 app.use(attachUser);
