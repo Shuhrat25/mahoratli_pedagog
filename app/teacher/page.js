@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usersApi, assignmentsApi } from "@/lib/api";
 import StatCard from "@/components/StatCard";
 import RatingWidget from "@/components/RatingWidget";
@@ -63,9 +63,24 @@ export default function TeacherDashboardPage() {
 
 function AreaChart({ data, totalStudents = 0 }) {
   const [hover, setHover] = useState(null);
+  const containerRef = useRef(null);
+  const [width, setWidth] = useState(600);
 
-  const width = 600;
-  const height = 200;
+  // SVG kengligini konteynerning haqiqiy piksel kengligiga moslaydi — shunda
+  // preserveAspectRatio="none" matn/nuqtalarni cho'zib-siqib buzmaydi va
+  // grafik butun kartani egallaydi (chap-o'ngda bo'sh joy qolmaydi).
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w > 0) setWidth(w);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const height = 192;
   const padLeft = 30;
   const padBottom = 20;
   const padTop = 10;
@@ -104,9 +119,10 @@ function AreaChart({ data, totalStudents = 0 }) {
   }
 
   return (
-    <div className="relative select-none">
+    <div ref={containerRef} className="relative select-none">
       <svg
         viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
         className="h-48 w-full overflow-visible"
         onMouseMove={handleMove}
         onMouseLeave={() => setHover(null)}
