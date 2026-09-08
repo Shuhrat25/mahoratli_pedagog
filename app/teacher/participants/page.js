@@ -135,7 +135,7 @@ export default function ParticipantsPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`badge ${u.isOnline ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-slate-100 text-slate-500 dark:bg-slate-800"}`}>
+                  <span className={`badge ${u.isOnline ? "bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300" : "bg-slate-100 text-slate-500 dark:bg-slate-800"}`}>
                     {u.isOnline ? "Onlayn" : "Oflayn"}
                   </span>
                 </td>

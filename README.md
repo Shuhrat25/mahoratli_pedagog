@@ -100,6 +100,16 @@ In a second terminal, from the project root:
 
 ```bash
 npm install
+```
+
+Create `.env.local` (see [Environment variables](#environment-variables) below):
+
+```
+BACKEND_URL=http://localhost:4000
+NEXT_PUBLIC_WS_URL=ws://localhost:4000/ws
+```
+
+```bash
 npm run dev
 ```
 
@@ -132,33 +142,53 @@ The app runs at `http://localhost:3000`.
 
 | Variable | Description |
 |---|---|
-| `NEXT_PUBLIC_API_URL` | Backend base URL, **including the `/api` path**, e.g. `http://localhost:4000/api` or `https://your-api.onrender.com/api` |
+| `BACKEND_URL` | Backend origin, **no `/api` suffix, no trailing slash** (e.g. `http://localhost:4000` or `https://your-api.onrender.com`). Server-side only — used by the `/api/*` rewrite proxy in `next.config.js`, never sent to the browser. |
+| `NEXT_PUBLIC_WS_URL` | Full WebSocket URL for the online-presence connection (e.g. `ws://localhost:4000/ws` or `wss://your-api.onrender.com/ws`) |
+
+### Why a proxy, not a direct API URL
+
+The frontend never calls the backend's domain directly for REST requests — `next.config.js`
+rewrites `/api/*` to `BACKEND_URL` **server-side**, so the browser only ever talks to its own
+origin. This matters because the frontend (Vercel) and backend (Render) live on different
+domains: a direct cross-origin call makes the auth cookie a *third-party cookie*, which
+Safari blocks by default and Chrome increasingly does too — login would appear to succeed
+(the response comes back fine) but silently fail to persist on reload. Routing through the
+same-origin proxy makes the cookie first-party regardless of where the backend actually
+lives.
+
+The one exception is the WebSocket (presence) connection, which can't be proxied this way
+(Vercel doesn't support relaying long-lived WS upgrades to an external server) — it connects
+to the backend directly via `NEXT_PUBLIC_WS_URL`. If a browser blocks that as third-party,
+only the online/offline indicator degrades; login and everything else keeps working through
+the proxy.
 
 ## Deployment
 
-- **Frontend → Vercel**: import the repo, set `NEXT_PUBLIC_API_URL` in the Vercel project's
-  environment variables (dashboard, not just a local file — `.env.local` is gitignored and
-  never reaches the build) to the deployed API URL **with the `/api` suffix**. Since
-  `NEXT_PUBLIC_*` vars are baked in at build time, you must trigger a redeploy after
-  changing one — restarting isn't enough.
+- **Frontend → Vercel**: import the repo. In the project's environment variables (dashboard —
+  `.env.local` is gitignored and never reaches the build), set `BACKEND_URL` (no `/api`) and
+  `NEXT_PUBLIC_WS_URL` to the deployed backend. **Remove any old `NEXT_PUBLIC_API_URL`** if
+  you set one previously — it overrides the proxy default and reintroduces the third-party
+  cookie bug. Redeploy after changing env vars; `NEXT_PUBLIC_*` values are baked in at build
+  time, so restarting isn't enough.
 - **Backend → Render** (or any Node host): root directory `server/`, build command
-  `npm install && npx prisma migrate deploy`, start command `npm start`. Set the same
-  environment variables as above, with `NODE_ENV=production` and `CLIENT_ORIGIN` set to
-  your Vercel URL (add `http://localhost:3000` too, comma-separated, if you also want to
-  test a local frontend against this deployed backend).
+  `npm install && npx prisma migrate deploy`, start command `npm start`. Set the server env
+  vars above, with `NODE_ENV=production` and `CLIENT_ORIGIN` set to your Vercel URL
+  (comma-separated with `http://localhost:3000` too if you want local dev to also reach this
+  deployed backend directly for testing).
 
-Two mistakes that look identical in the browser console (both throw a CORS-looking error)
-but have different fixes:
-- **Missing `/api`** in `NEXT_PUBLIC_API_URL` → requests hit `/auth/login` instead of
-  `/api/auth/login` and fail outright.
-- **Stale `CLIENT_ORIGIN`** on the backend (still `localhost:3000` after deploying the
-  frontend elsewhere) → the backend actively rejects the real origin.
+> **Managed Postgres + `prisma migrate dev` don't mix well:** most hosted free-tier Postgres
+> (Render included) doesn't grant the SUPERUSER rights `migrate dev`'s shadow-database step
+> needs, so it fails with a permissions error. To generate a migration against one, use
+> `npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script`
+> to get the raw SQL, save it under `prisma/migrations/<timestamp>_name/migration.sql`
+> yourself, and apply it with `npx prisma migrate deploy` (which doesn't need a shadow
+> database). Also keep `prisma/migrations/migration_lock.toml` in sync with the schema's
+> `provider` — a mismatch fails the next `migrate deploy` with error `P3019`.
 
-> **Note:** SQLite is fine for local development, but most PaaS free tiers have an
-> ephemeral filesystem — switch `DATABASE_URL` (and `provider` in
-> `server/prisma/schema.prisma`) to PostgreSQL before deploying anywhere persistent data
-> matters. The schema was written without native enums specifically so this swap requires
-> no other changes.
+> **SQLite vs PostgreSQL:** the schema was written without native enums specifically so
+> switching `provider` in `server/prisma/schema.prisma` between `sqlite` and `postgresql`
+> needs no other model changes — only the migration history has to match whichever provider
+> is current (see above).
 
 ## Known limitations
 

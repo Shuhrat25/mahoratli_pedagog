@@ -10,11 +10,11 @@ const router = express.Router();
 // qiladi — shu qatordagi klasslar tailwind.config.js'dagi safelist bilan mos
 // kelishi shart, aks holda banner foni chizilmay, matn ko'rinmay qoladi.
 const GRADIENTS = [
-  "from-brand-600 to-emerald-700",
-  "from-emerald-600 to-teal-700",
-  "from-teal-600 to-cyan-700",
-  "from-sky-600 to-indigo-700",
-  "from-indigo-600 to-purple-700",
+  "from-brand-600 to-sky-700",
+  "from-sky-600 to-cyan-700",
+  "from-cyan-600 to-blue-700",
+  "from-blue-600 to-indigo-700",
+  "from-indigo-600 to-violet-700",
 ];
 
 router.get("/", async (req, res) => {

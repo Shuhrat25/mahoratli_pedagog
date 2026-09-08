@@ -69,9 +69,9 @@ async function main() {
   console.log("Bannerlar...");
   await prisma.banner.createMany({
     data: [
-      { title: "Ajdodlarimiz o'giti — har kuni bir hikmat", text: "“Odob va yaxshi xulq kishining ziynatidir” — Yusuf Xos Hojib", color: "from-brand-600 to-emerald-700", order: 0 },
-      { title: "Ajdodlarimiz komiksda", text: "Xalq ertaklarini zamonaviy komiksga aylantiring va ijodiy fikrlashni rivojlantiring", color: "from-emerald-600 to-teal-700", order: 1 },
-      { title: "Etnopodkast va Audio-ertak", text: "Pedagogik artistizm va nutq intonatsiyasini audio orqali rivojlantiring", color: "from-teal-600 to-cyan-700", order: 2 },
+      { title: "Ajdodlarimiz o'giti — har kuni bir hikmat", text: "“Odob va yaxshi xulq kishining ziynatidir” — Yusuf Xos Hojib", color: "from-brand-600 to-sky-700", order: 0 },
+      { title: "Ajdodlarimiz komiksda", text: "Xalq ertaklarini zamonaviy komiksga aylantiring va ijodiy fikrlashni rivojlantiring", color: "from-sky-600 to-cyan-700", order: 1 },
+      { title: "Etnopodkast va Audio-ertak", text: "Pedagogik artistizm va nutq intonatsiyasini audio orqali rivojlantiring", color: "from-cyan-600 to-blue-700", order: 2 },
     ],
   });
 
