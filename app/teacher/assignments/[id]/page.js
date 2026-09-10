@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { assignmentsApi, fileUrl } from "@/lib/api";
 import Modal from "@/components/Modal";
+import RichText from "@/components/RichText";
+import RichTextEditor from "@/components/RichTextEditor";
 import { Icon, paths } from "@/components/icons";
 
 export default function TeacherAssignmentDetailPage() {
@@ -51,7 +53,7 @@ export default function TeacherAssignmentDetailPage() {
 
       {assignment.description && (
         <div className="card mb-4 p-4">
-          <p className="text-sm text-slate-700 dark:text-slate-300">{assignment.description}</p>
+          <RichText value={assignment.description} className="text-sm text-slate-700 dark:text-slate-300" />
         </div>
       )}
 
@@ -123,7 +125,13 @@ export default function TeacherAssignmentDetailPage() {
             </div>
             <div>
               <label className="label">Izoh (ixtiyoriy)</label>
-              <textarea value={comment} onChange={(e) => setComment(e.target.value)} className="input" rows={3} />
+              <RichTextEditor
+                compact
+                value={comment}
+                onChange={setComment}
+                placeholder="Ishning kuchli tomonlari va tavsiyalar..."
+                ariaLabel="Baholash izohi"
+              />
             </div>
             <button type="submit" className="btn-primary w-full">
               Saqlash

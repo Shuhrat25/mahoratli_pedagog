@@ -39,7 +39,9 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+// Rich-text tahrirlagich uzun HTML yuborishi mumkin (dars matni, vazifa
+// tavsifi), shuning uchun express'ning standart 100kb chegarasi oshirilgan.
+app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 app.use(attachUser);
 

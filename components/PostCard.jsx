@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { postsApi, fileUrl } from "@/lib/api";
+import RichText from "@/components/RichText";
 
 export default function PostCard({ post, onUpdate }) {
   const [commentText, setCommentText] = useState("");
@@ -38,9 +39,7 @@ export default function PostCard({ post, onUpdate }) {
         </div>
       </div>
       <h3 className="mb-1.5 text-base font-bold">{post.title}</h3>
-      {post.text && (
-        <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700 dark:text-slate-300">{post.text}</p>
-      )}
+      {post.text && <RichText value={post.text} className="text-sm leading-relaxed text-slate-700 dark:text-slate-300" />}
       {post.videoUrl && (
         <div className="mt-3 aspect-video w-full overflow-hidden rounded-xl bg-black">
           <iframe src={post.videoUrl} title={post.title} className="h-full w-full" allowFullScreen />

@@ -4,8 +4,22 @@
     {
       "name": "mahoratli-pedagog",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "mahoratli-pedagog-api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "server",
+        "run",
+        "dev"
+      ],
+      "port": 4000
     }
   ]
 }

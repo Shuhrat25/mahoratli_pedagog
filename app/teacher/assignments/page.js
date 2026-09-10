@@ -5,6 +5,8 @@ import Link from "next/link";
 import { assignmentsApi, ApiError } from "@/lib/api";
 import Modal from "@/components/Modal";
 import KebabMenu from "@/components/KebabMenu";
+import RichTextEditor from "@/components/RichTextEditor";
+import { isEmptyHtml } from "@/lib/richText";
 import { Icon, paths } from "@/components/icons";
 
 export default function TeacherAssignmentsPage() {
@@ -68,7 +70,7 @@ export default function TeacherAssignmentsPage() {
   }
   async function save(e) {
     e.preventDefault();
-    if (assignmentType === "FILE" && !description.trim() && !editing?.materials?.length) {
+    if (assignmentType === "FILE" && isEmptyHtml(description) && !editing?.materials?.length) {
       setFormError("Tavsif yoki materiallardan kamida bittasi to'ldirilishi shart");
       return;
     }
@@ -157,7 +159,13 @@ export default function TeacherAssignmentsPage() {
           </div>
           <div>
             <label className="label">Tavsif{assignmentType === "TEST" && " (ixtiyoriy)"}</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="input" rows={4} />
+            <RichTextEditor
+              value={description}
+              onChange={setDescription}
+              placeholder="Vazifa sharti, bajarish tartibi, baholash mezonlari..."
+              ariaLabel="Vazifa tavsifi"
+              minHeight={200}
+            />
           </div>
 
           {assignmentType === "TEST" && (

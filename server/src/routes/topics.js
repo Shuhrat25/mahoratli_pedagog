@@ -7,6 +7,7 @@ const { computeLocks } = require("../lib/lessonAccess");
 const { extractText } = require("../lib/fileText");
 const { parseTestMarkup } = require("../lib/testMarkup");
 const { LESSON_TYPES } = require("../lib/constants");
+const { sanitizeHtml } = require("../lib/sanitizeHtml");
 
 const router = express.Router();
 
@@ -87,7 +88,7 @@ router.post("/:topicId/lessons", requireRole("ADMIN", "TEACHER"), async (req, re
       title,
       type,
       videoUrl: videoUrl || null,
-      content: content || null,
+      content: content ? sanitizeHtml(content) : null,
       order: count,
       questions:
         type === "TEST" && Array.isArray(questions)
@@ -110,7 +111,7 @@ router.patch("/:topicId/lessons/:lessonId", requireRole("ADMIN", "TEACHER"), asy
   const data = {};
   if (title !== undefined) data.title = title;
   if (videoUrl !== undefined) data.videoUrl = videoUrl;
-  if (content !== undefined) data.content = content;
+  if (content !== undefined) data.content = content ? sanitizeHtml(content) : null;
   const lesson = await prisma.lesson.update({
     where: { id: req.params.lessonId },
     data,

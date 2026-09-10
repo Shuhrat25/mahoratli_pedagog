@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fileUrl } from "@/lib/api";
+import RichText from "@/components/RichText";
 
 export default function BannerCarousel({ banners }) {
   const [index, setIndex] = useState(0);
@@ -41,7 +42,7 @@ export default function BannerCarousel({ banners }) {
 
       <div className="relative max-w-xl">
         <h2 className="text-xl font-extrabold leading-tight drop-shadow-sm sm:text-3xl">{banner.title}</h2>
-        <p className="mt-3 text-sm text-white/90 drop-shadow-sm sm:text-base">{banner.text}</p>
+        <RichText value={banner.text} inline className="mt-3 text-sm text-white/90 drop-shadow-sm sm:text-base" />
       </div>
 
       {banners.length > 1 && (

@@ -5,6 +5,7 @@ const { upload } = require("../middleware/upload");
 const { createUploadedFileRecord } = require("../lib/uploadedFile");
 const { extractText } = require("../lib/fileText");
 const { parseTestMarkup } = require("../lib/testMarkup");
+const { sanitizeHtml, isEmptyHtml } = require("../lib/sanitizeHtml");
 
 const router = express.Router();
 
@@ -76,22 +77,23 @@ router.get("/:id", requireAuth, async (req, res) => {
 router.post("/", requireRole("ADMIN", "TEACHER"), async (req, res) => {
   const { title, description, type, maxScore, dueDate, steps } = req.body;
   const assignmentType = type === "TEST" ? "TEST" : "FILE";
+  const cleanDescription = isEmptyHtml(description) ? "" : sanitizeHtml(description);
   if (!title || !maxScore || !dueDate) return res.status(400).json({ error: "Nomi, ball va muddat talab qilinadi" });
   // TEST turida savollar keyingi qadamda (fayl import qilinganda) qo'shiladi,
   // shuning uchun tavsif/qadam talabi faqat FILE turiga tegishli.
-  if (assignmentType === "FILE" && !description && !(Array.isArray(steps) && steps.length)) {
+  if (assignmentType === "FILE" && !cleanDescription && !(Array.isArray(steps) && steps.length)) {
     return res.status(400).json({ error: "Tavsif yoki qadamlardan kamida bittasi to'ldirilishi shart" });
   }
   const a = await prisma.assignment.create({
     data: {
       title,
-      description: description || "",
+      description: cleanDescription,
       type: assignmentType,
       maxScore: Number(maxScore),
       dueDate: new Date(dueDate),
       steps:
         assignmentType === "FILE" && Array.isArray(steps)
-          ? { create: steps.map((s, i) => ({ title: s.title, text: s.text, order: i })) }
+          ? { create: steps.map((s, i) => ({ title: s.title, text: sanitizeHtml(s.text), order: i })) }
           : undefined,
     },
     include: detailInclude,
@@ -103,7 +105,7 @@ router.patch("/:id", requireRole("ADMIN", "TEACHER"), async (req, res) => {
   const { title, description, maxScore, dueDate } = req.body;
   const data = {};
   if (title !== undefined) data.title = title;
-  if (description !== undefined) data.description = description;
+  if (description !== undefined) data.description = isEmptyHtml(description) ? "" : sanitizeHtml(description);
   if (maxScore !== undefined) data.maxScore = Number(maxScore);
   if (dueDate !== undefined) data.dueDate = new Date(dueDate);
   const a = await prisma.assignment.update({ where: { id: req.params.id }, data, include: detailInclude });
@@ -226,7 +228,7 @@ router.patch("/:id/submissions/:subId", requireRole("ADMIN", "TEACHER"), async (
   const previous = await prisma.submission.findUnique({ where: { id: req.params.subId } });
   const submission = await prisma.submission.update({
     where: { id: req.params.subId },
-    data: { score: clampedScore, comment: comment || null, status: "REVIEWED" },
+    data: { score: clampedScore, comment: isEmptyHtml(comment) ? null : sanitizeHtml(comment), status: "REVIEWED" },
   });
 
   // Talaba ballari umumiy reyting uchun User.points ga qo'shiladi (faqat

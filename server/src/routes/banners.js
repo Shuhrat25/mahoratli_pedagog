@@ -3,6 +3,7 @@ const prisma = require("../db");
 const { requireRole } = require("../middleware/auth");
 const { upload } = require("../middleware/upload");
 const { createUploadedFileRecord } = require("../lib/uploadedFile");
+const { sanitizeHtml } = require("../lib/sanitizeHtml");
 
 const router = express.Router();
 
@@ -38,7 +39,7 @@ router.post("/", requireRole("ADMIN", "TEACHER"), upload.single("image"), async 
   const banner = await prisma.banner.create({
     data: {
       title,
-      text,
+      text: sanitizeHtml(text),
       color: color || GRADIENTS[Math.floor(Math.random() * GRADIENTS.length)],
       order: count,
       imageId,
@@ -51,7 +52,7 @@ router.patch("/:id", requireRole("ADMIN", "TEACHER"), upload.single("image"), as
   const { title, text, color } = req.body;
   const data = {};
   if (title !== undefined) data.title = title;
-  if (text !== undefined) data.text = text;
+  if (text !== undefined) data.text = sanitizeHtml(text);
   if (color !== undefined) data.color = color;
   if (req.file) {
     const file = await createUploadedFileRecord(req.file, req.user.id);

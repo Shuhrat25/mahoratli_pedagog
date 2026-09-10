@@ -48,3 +48,91 @@ body {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
 }
+
+/* --------------------------------------------------------------------------
+   Rich-text: RichTextEditor'da yozilgan va RichText'da ko'rsatiladigan matn
+   uchun yagona tipografiya. Ikkala joyda ham bir xil klass ishlatiladi, shunda
+   o'qituvchi tahrirlash paytida natijani aynan ko'radi (WYSIWYG).
+   -------------------------------------------------------------------------- */
+@layer components {
+  .rich-content > *:first-child {
+    @apply mt-0;
+  }
+  .rich-content > *:last-child {
+    @apply mb-0;
+  }
+  .rich-content p,
+  .rich-content div {
+    @apply my-2;
+  }
+  .rich-content h1 {
+    @apply mb-2 mt-4 text-2xl font-extrabold leading-tight;
+  }
+  .rich-content h2 {
+    @apply mb-2 mt-4 text-xl font-bold leading-tight;
+  }
+  .rich-content h3 {
+    @apply mb-1.5 mt-3 text-base font-bold leading-snug;
+  }
+  .rich-content ul {
+    @apply my-2 list-disc space-y-1 pl-6;
+  }
+  .rich-content ol {
+    @apply my-2 list-decimal space-y-1 pl-6;
+  }
+  .rich-content li {
+    @apply pl-1;
+  }
+  .rich-content blockquote {
+    @apply my-3 rounded-r-lg border-l-4 border-brand-400 bg-brand-50/60 py-2 pl-4 pr-3 italic text-slate-600 dark:border-brand-500 dark:bg-brand-900/20 dark:text-slate-300;
+  }
+  .rich-content pre {
+    @apply my-3 overflow-x-auto rounded-lg bg-slate-900 p-3 font-mono text-[13px] leading-relaxed text-slate-100 dark:bg-slate-800;
+  }
+  .rich-content code {
+    @apply rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[0.9em] text-brand-700 dark:bg-slate-800 dark:text-brand-300;
+  }
+  .rich-content pre code {
+    @apply bg-transparent p-0 text-inherit;
+  }
+  .rich-content a {
+    @apply font-medium text-brand-700 underline decoration-brand-300 underline-offset-2 hover:decoration-brand-600 dark:text-brand-400;
+  }
+  .rich-content hr {
+    @apply my-4 border-slate-200 dark:border-slate-700;
+  }
+  .rich-content img {
+    @apply my-3 max-w-full rounded-xl;
+  }
+  .rich-content table {
+    @apply my-3 w-full border-collapse text-sm;
+  }
+  .rich-content th,
+  .rich-content td {
+    @apply border border-slate-200 px-2.5 py-1.5 text-left dark:border-slate-700;
+  }
+  .rich-content th {
+    @apply bg-slate-50 font-semibold dark:bg-slate-800;
+  }
+  .rich-content mark {
+    @apply rounded px-0.5;
+  }
+
+  /* Banner kabi tor joylarda bloklar orasidagi bo'shliq kerak emas */
+  .rich-content-inline p,
+  .rich-content-inline div {
+    @apply my-0;
+  }
+  .rich-content-inline a {
+    @apply text-inherit decoration-white/60;
+  }
+}
+
+/* Tahrirlagichdagi placeholder: contentEditable bo'sh bo'lganda ko'rinadi
+   (brauzer o'chirishdan keyin ichida <br> qoldirishi mumkin — ikkinchi qoida
+   aynan shu holat uchun). */
+.rich-content[data-placeholder]:empty::before,
+.rich-content[data-placeholder]:has(> br:only-child)::before {
+  content: attr(data-placeholder);
+  @apply pointer-events-none block text-slate-400 dark:text-slate-500;
+}

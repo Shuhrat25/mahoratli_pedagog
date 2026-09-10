@@ -33,6 +33,10 @@ The app's interface is in Uzbek (Latin script), built around a national-values c
 - Home page content management: banners, posts (title + optional description, image, or
   YouTube embed — blog-style), polls
 - Lessons/topics management with drag-style reordering and the DOCX/PDF test importer
+- **Rich text everywhere the teacher writes** — a dependency-free WYSIWYG editor
+  (headings, lists, quotes, code blocks, colours/highlight, alignment, links,
+  fullscreen) on banners, posts, lesson content, assignment descriptions, grading
+  comments and forum posts. Students still get plain inputs.
 - Assignment creation and grading (grades feed into a student point/rating system)
 - Materials management (batch upload)
 - Forum moderation
@@ -53,6 +57,7 @@ cannot touch teacher accounts.
 | File uploads | Multer, served through a permission-checked download route |
 | Email | Resend (registration / password-reset verification codes) |
 | DOCX/PDF parsing | `mammoth`, `pdf-parse` |
+| Rich text | Custom `contentEditable` editor + HTML allowlist sanitiser (no external editor library) |
 
 ## Project structure
 
@@ -189,6 +194,22 @@ the proxy.
 > switching `provider` in `server/prisma/schema.prisma` between `sqlite` and `postgresql`
 > needs no other model changes — only the migration history has to match whichever provider
 > is current (see above).
+
+## Rich text and HTML safety
+
+Teacher/admin text fields store **HTML**, produced by `components/RichTextEditor.jsx`
+(zero dependencies, built on `contentEditable`). Older records are still plain text —
+`components/RichText.jsx` detects which is which, so no data migration was needed.
+
+HTML is sanitised **twice**, against a tag/attribute allowlist:
+
+- **Server** (`server/src/lib/sanitizeHtml.js`) before every write — this is the one that
+  matters, because the API can be called directly, bypassing the browser.
+- **Client** (`lib/richText.js`) on paste and again on render, which also cleans up
+  records written before the sanitiser existed.
+
+`<script>`, `<iframe>`, every `on*` handler, `javascript:` URLs and CSS `url()` are
+stripped; surviving `<a>` tags get `target="_blank" rel="noopener noreferrer nofollow"`.
 
 ## Known limitations
 

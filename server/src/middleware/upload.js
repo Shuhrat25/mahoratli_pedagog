@@ -15,7 +15,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: MAX_UPLOAD_BYTES },
+  // fieldSize — multipart so'rovdagi MATN maydonlari uchun (multer'da standart
+  // qiymati 1MB). Post/banner matni rich-text HTML sifatida aynan shu yo'l
+  // bilan (FormData) yuboriladi, shuning uchun chegara oshirilgan.
+  limits: { fileSize: MAX_UPLOAD_BYTES, fieldSize: 2 * 1024 * 1024 },
 });
 
 module.exports = { upload, UPLOAD_DIR };

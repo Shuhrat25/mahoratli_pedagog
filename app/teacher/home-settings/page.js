@@ -5,6 +5,9 @@ import { bannersApi, postsApi, pollsApi, fileUrl, ApiError } from "@/lib/api";
 import { useApp } from "@/lib/auth-context";
 import Modal from "@/components/Modal";
 import KebabMenu from "@/components/KebabMenu";
+import RichText from "@/components/RichText";
+import RichTextEditor from "@/components/RichTextEditor";
+import { isEmptyHtml, plainTextFromHtml, truncate } from "@/lib/richText";
 import { Icon, paths } from "@/components/icons";
 
 const TABS = [
@@ -49,6 +52,7 @@ function BannersTab() {
   const [text, setText] = useState("");
   const [image, setImage] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
 
   function reload() {
     return bannersApi.list().then(({ banners }) => setBanners(banners));
@@ -63,6 +67,7 @@ function BannersTab() {
     setTitle("");
     setText("");
     setImage(null);
+    setFormError("");
     setOpen(true);
   }
   function openEdit(b) {
@@ -70,11 +75,19 @@ function BannersTab() {
     setTitle(b.title);
     setText(b.text);
     setImage(null);
+    setFormError("");
     setOpen(true);
   }
   async function save(e) {
     e.preventDefault();
+    // Matn maydoni endi contentEditable — brauzerning `required` tekshiruvi
+    // unga ta'sir qilmaydi, shuning uchun qo'lda tekshiramiz.
+    if (isEmptyHtml(text)) {
+      setFormError("Banner matnini to'ldiring");
+      return;
+    }
     setSaving(true);
+    setFormError("");
     try {
       if (editing) {
         await bannersApi.update(editing.id, { title, text, image: image || undefined });
@@ -116,7 +129,7 @@ function BannersTab() {
             {b.imageId && <div className="absolute inset-0 bg-black/40" />}
             <div className="relative min-w-0 flex-1">
               <p className="font-semibold">{b.title}</p>
-              <p className="text-sm text-white/90">{b.text}</p>
+              <RichText value={b.text} inline className="text-sm text-white/90" />
             </div>
             <div className="relative flex shrink-0 items-center gap-1">
               <button onClick={() => move(b.id, -1)} disabled={i === 0} className="rounded p-1 hover:bg-white/20 disabled:opacity-30">
@@ -144,7 +157,13 @@ function BannersTab() {
           </div>
           <div>
             <label className="label">Matn</label>
-            <textarea value={text} onChange={(e) => setText(e.target.value)} className="input" rows={3} required />
+            <RichTextEditor
+              compact
+              value={text}
+              onChange={setText}
+              placeholder="Banner ostidagi qisqa matn..."
+              ariaLabel="Banner matni"
+            />
           </div>
           <div>
             <label className="label">Fon rasmi (ixtiyoriy — tanlanmasa, rangli fon ishlatiladi)</label>
@@ -153,6 +172,7 @@ function BannersTab() {
               <p className="mt-1 text-xs text-slate-500">Yangi rasm tanlanmasa, joriy rasm saqlanadi.</p>
             )}
           </div>
+          {formError && <p className="text-sm text-red-600">{formError}</p>}
           <button type="submit" className="btn-primary w-full" disabled={saving}>
             {saving ? "Saqlanmoqda..." : "Saqlash"}
           </button>
@@ -244,7 +264,11 @@ function PostsTab() {
                 {p.authorName} · {new Date(p.createdAt).toLocaleDateString("uz-UZ")}
               </p>
               <p className="mt-1 font-semibold">{p.title}</p>
-              {p.text && <p className="mt-0.5 whitespace-pre-line text-sm text-slate-600 dark:text-slate-400">{p.text}</p>}
+              {p.text && (
+                <p className="mt-0.5 line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
+                  {truncate(plainTextFromHtml(p.text), 180)}
+                </p>
+              )}
               {(p.videoUrl || p.imageId) && (
                 <p className="mt-1 text-xs text-indigo-500">{p.videoUrl ? "🎬 Video biriktirilgan" : "🖼 Rasm biriktirilgan"}</p>
               )}
@@ -261,8 +285,14 @@ function PostsTab() {
             <input value={title} onChange={(e) => setTitle(e.target.value)} className="input" required />
           </div>
           <div>
-            <label className="label">Tavsif (ixtiyoriy)</label>
-            <textarea value={text} onChange={(e) => setText(e.target.value)} className="input" rows={4} placeholder="Post matni..." />
+            <label className="label">Post matni (ixtiyoriy)</label>
+            <RichTextEditor
+              value={text}
+              onChange={setText}
+              placeholder="Post matni — sarlavhalar, ro'yxatlar, havolalar va rangli ajratmalar bilan..."
+              ariaLabel="Post matni"
+              minHeight={240}
+            />
           </div>
           <div>
             <label className="label">YouTube video havolasi (ixtiyoriy — video bo'lsa, rasm o'rniga shu ko'rsatiladi)</label>

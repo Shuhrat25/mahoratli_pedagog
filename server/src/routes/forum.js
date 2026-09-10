@@ -1,6 +1,7 @@
 const express = require("express");
 const prisma = require("../db");
 const { requireAuth } = require("../middleware/auth");
+const { sanitizeHtml } = require("../lib/sanitizeHtml");
 
 const router = express.Router();
 
@@ -48,7 +49,7 @@ router.post("/", requireAuth, async (req, res) => {
     data: {
       title,
       authorId: req.user.id,
-      replies: text ? { create: [{ text, authorId: req.user.id }] } : undefined,
+      replies: text ? { create: [{ text: sanitizeHtml(text), authorId: req.user.id }] } : undefined,
     },
     include,
   });
@@ -68,7 +69,9 @@ router.delete("/:id", requireAuth, async (req, res) => {
 router.post("/:id/replies", requireAuth, async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: "Matn talab qilinadi" });
-  await prisma.forumReply.create({ data: { text, threadId: req.params.id, authorId: req.user.id } });
+  await prisma.forumReply.create({
+    data: { text: sanitizeHtml(text), threadId: req.params.id, authorId: req.user.id },
+  });
   const thread = await prisma.forumThread.findUnique({ where: { id: req.params.id }, include });
   res.status(201).json({ thread: shapeThread(thread) });
 });

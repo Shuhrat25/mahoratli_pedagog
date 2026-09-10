@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { assignmentsApi, fileUrl } from "@/lib/api";
+import RichText from "@/components/RichText";
 import { Icon, paths } from "@/components/icons";
 
 export default function StudentAssignmentDetailPage() {
@@ -57,7 +58,7 @@ export default function StudentAssignmentDetailPage() {
 
       {assignment.description && (
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">{assignment.description}</p>
+          <RichText value={assignment.description} className="text-sm leading-relaxed text-slate-700 dark:text-slate-300" />
         </div>
       )}
 
@@ -68,7 +69,7 @@ export default function StudentAssignmentDetailPage() {
               <p className="font-semibold">
                 {i + 1}. {s.title}
               </p>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{s.text}</p>
+              <RichText value={s.text} className="mt-1 text-sm text-slate-600 dark:text-slate-400" />
             </div>
           ))}
         </div>
@@ -158,17 +159,24 @@ export default function StudentAssignmentDetailPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h3 className="mb-2 font-bold">Bajarilgan ishni yuborish</h3>
           {mySubmission && (
-            <p className="mb-3 text-sm">
-              Yuborilgan fayl: <span className="font-medium">{mySubmission.fileName}</span> ·{" "}
-              {mySubmission.status === "REVIEWED" ? (
-                <span className="text-emerald-600 dark:text-emerald-400">
-                  Baholandi: {mySubmission.score}/{assignment.maxScore}
-                  {mySubmission.comment && ` — "${mySubmission.comment}"`}
-                </span>
-              ) : (
-                <span className="text-amber-600">Tekshirilmoqda</span>
+            <div className="mb-3 text-sm">
+              <p>
+                Yuborilgan fayl: <span className="font-medium">{mySubmission.fileName}</span> ·{" "}
+                {mySubmission.status === "REVIEWED" ? (
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    Baholandi: {mySubmission.score}/{assignment.maxScore}
+                  </span>
+                ) : (
+                  <span className="text-amber-600">Tekshirilmoqda</span>
+                )}
+              </p>
+              {mySubmission.status === "REVIEWED" && mySubmission.comment && (
+                <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">O&apos;qituvchi izohi</p>
+                  <RichText value={mySubmission.comment} className="text-sm text-slate-700 dark:text-slate-300" />
+                </div>
               )}
-            </p>
+            </div>
           )}
           {!closed && (
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">

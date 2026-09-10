@@ -3,6 +3,7 @@ const prisma = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { upload } = require("../middleware/upload");
 const { createUploadedFileRecord } = require("../lib/uploadedFile");
+const { sanitizeHtml } = require("../lib/sanitizeHtml");
 
 const router = express.Router();
 
@@ -51,7 +52,7 @@ router.post("/", requireRole("ADMIN", "TEACHER"), upload.single("image"), async 
   }
 
   const post = await prisma.post.create({
-    data: { title, text: text || null, videoUrl: videoUrl || null, imageId, authorId: req.user.id },
+    data: { title, text: text ? sanitizeHtml(text) : null, videoUrl: videoUrl || null, imageId, authorId: req.user.id },
     include,
   });
   res.status(201).json({ post: shapePost(post, req.user.id) });
@@ -61,7 +62,7 @@ router.patch("/:id", requireRole("ADMIN", "TEACHER"), upload.single("image"), as
   const { title, text, videoUrl } = req.body;
   const data = {};
   if (title !== undefined) data.title = title;
-  if (text !== undefined) data.text = text || null;
+  if (text !== undefined) data.text = text ? sanitizeHtml(text) : null;
   if (videoUrl !== undefined) data.videoUrl = videoUrl || null;
   if (req.file) {
     const file = await createUploadedFileRecord(req.file, req.user.id);
@@ -92,7 +93,7 @@ router.post("/:id/like", requireAuth, async (req, res) => {
 router.post("/:id/comments", requireAuth, async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: "Matn talab qilinadi" });
-  await prisma.comment.create({ data: { text, postId: req.params.id, authorId: req.user.id } });
+  await prisma.comment.create({ data: { text: sanitizeHtml(text), postId: req.params.id, authorId: req.user.id } });
   const post = await prisma.post.findUnique({ where: { id: req.params.id }, include });
   res.status(201).json({ post: shapePost(post, req.user.id) });
 });

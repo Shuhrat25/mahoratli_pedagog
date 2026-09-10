@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { topicsApi } from "@/lib/api";
+import RichText from "@/components/RichText";
 import { Icon, paths } from "@/components/icons";
 
 function findNextLesson(topics, topicId, lessonId) {
@@ -99,7 +100,7 @@ export default function LessonPage() {
           </div>
           {lesson.content && (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <p className="whitespace-pre-line leading-relaxed text-slate-700 dark:text-slate-300">{lesson.content}</p>
+              <RichText value={lesson.content} className="leading-relaxed text-slate-700 dark:text-slate-300" />
             </div>
           )}
         </div>
@@ -107,7 +108,7 @@ export default function LessonPage() {
 
       {lesson.type === "TEXT" && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <p className="whitespace-pre-line leading-relaxed text-slate-700 dark:text-slate-300">{lesson.content}</p>
+          <RichText value={lesson.content} className="leading-relaxed text-slate-700 dark:text-slate-300" />
           {!lesson.done && (
             <button
               onClick={markDone}

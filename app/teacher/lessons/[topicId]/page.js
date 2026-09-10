@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { topicsApi, ApiError } from "@/lib/api";
 import Modal from "@/components/Modal";
 import KebabMenu from "@/components/KebabMenu";
+import RichTextEditor from "@/components/RichTextEditor";
+import { isEmptyHtml } from "@/lib/richText";
 import { Icon, paths } from "@/components/icons";
 
 const TYPE_LABEL = { VIDEO: "Video", TEXT: "Matn", TEST: "Test" };
@@ -69,6 +71,12 @@ export default function TeacherTopicLessonsPage() {
 
   async function save(e) {
     e.preventDefault();
+    // Matnli dars uchun mazmun majburiy — contentEditable'da brauzerning
+    // `required` tekshiruvi ishlamaydi, shuning uchun qo'lda tekshiramiz.
+    if (lessonType === "TEXT" && !editing && isEmptyHtml(content)) {
+      setFormError("Dars matnini to'ldiring");
+      return;
+    }
     setSaving(true);
     setFormError("");
     try {
@@ -171,15 +179,27 @@ export default function TeacherTopicLessonsPage() {
               </div>
               <div>
                 <label className="label">Tavsif (ixtiyoriy)</label>
-                <textarea value={content} onChange={(e) => setContent(e.target.value)} className="input" rows={4} placeholder="Video haqida qisqacha tavsif" />
+                <RichTextEditor
+                  value={content}
+                  onChange={setContent}
+                  placeholder="Video haqida qisqacha tavsif, asosiy tushunchalar, havolalar..."
+                  ariaLabel="Video darsi tavsifi"
+                  minHeight={160}
+                />
               </div>
             </div>
           )}
 
           {lessonType === "TEXT" && (
             <div>
-              <label className="label">Matnli tavsif</label>
-              <textarea value={content} onChange={(e) => setContent(e.target.value)} className="input" rows={5} required={!editing} />
+              <label className="label">Dars matni</label>
+              <RichTextEditor
+                value={content}
+                onChange={setContent}
+                placeholder="Dars matni — sarlavhalar, ro'yxatlar, iqtiboslar va havolalar bilan..."
+                ariaLabel="Dars matni"
+                minHeight={280}
+              />
             </div>
           )}
 

@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApp } from "@/lib/auth-context";
 import { forumApi } from "@/lib/api";
+import RichText from "@/components/RichText";
+import RichTextEditor from "@/components/RichTextEditor";
+import { isEmptyHtml } from "@/lib/richText";
 import { Icon, paths } from "@/components/icons";
 
 export default function ForumThreadView({ basePath }) {
@@ -23,7 +26,7 @@ export default function ForumThreadView({ basePath }) {
 
   async function addReply(e) {
     e.preventDefault();
-    if (!reply.trim()) return;
+    if (isEmptyHtml(reply)) return;
     const { thread: updated } = await forumApi.reply(threadId, reply);
     setThread(updated);
     setReply("");
@@ -69,7 +72,7 @@ export default function ForumThreadView({ basePath }) {
                 <span className="font-medium">{r.authorName}</span>{" "}
                 <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleDateString("uz-UZ")}</span>
               </p>
-              <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{r.text}</p>
+              <RichText value={r.text} className="mt-1 text-sm text-slate-700 dark:text-slate-300" />
             </div>
             {(canModerate || r.authorId === currentUser?.id) && (
               <button onClick={() => deleteReply(r.id)} className="shrink-0 text-xs text-red-600 hover:underline">
@@ -80,12 +83,29 @@ export default function ForumThreadView({ basePath }) {
         ))}
       </div>
 
-      <form onSubmit={addReply} className="mt-4 flex gap-2">
-        <input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Javob yozing..." className="input" />
-        <button type="submit" className="btn-primary shrink-0">
-          Yuborish
-        </button>
-      </form>
+      {canModerate ? (
+        <form onSubmit={addReply} className="mt-4 space-y-2">
+          <RichTextEditor
+            compact
+            value={reply}
+            onChange={setReply}
+            placeholder="Javob yozing..."
+            ariaLabel="Forum javobi"
+          />
+          <div className="flex justify-end">
+            <button type="submit" className="btn-primary">
+              Yuborish
+            </button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={addReply} className="mt-4 flex gap-2">
+          <input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Javob yozing..." className="input" />
+          <button type="submit" className="btn-primary shrink-0">
+            Yuborish
+          </button>
+        </form>
+      )}
     </div>
   );
 }
