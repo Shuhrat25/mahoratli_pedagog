@@ -46,7 +46,8 @@ export default function StudentAssignmentsPage() {
                 </span>
               </div>
               <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
-                <Icon path={paths.assignments} className="h-4 w-4 text-indigo-400" /> Maksimal baho: {a.maxScore}
+                <Icon path={paths.assignments} className="h-4 w-4 text-indigo-400" />
+                {a.type === "TEST" ? `Test · ${a.questions?.length || 0} savol` : "Fayl topshirish"} · Maksimal baho: {a.maxScore}
               </p>
               <p className="mt-1 text-sm text-slate-500">Muddat: {formatDue(a.dueDate)}</p>
               {mySubmission && (

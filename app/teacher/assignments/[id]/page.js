@@ -45,12 +45,15 @@ export default function TeacherAssignmentDetailPage() {
 
       <h1 className="mb-1 text-xl font-semibold">{assignment.title}</h1>
       <p className="mb-4 text-sm text-slate-500">
+        {assignment.type === "TEST" ? `Test · ${assignment.questions?.length || 0} savol (avtomatik baholanadi)` : "Fayl topshirish"} ·
         Maksimal baho: {assignment.maxScore} · Muddat: {new Date(assignment.dueDate).toLocaleString("uz-UZ")}
       </p>
 
-      <div className="card mb-4 p-4">
-        <p className="text-sm text-slate-700 dark:text-slate-300">{assignment.description}</p>
-      </div>
+      {assignment.description && (
+        <div className="card mb-4 p-4">
+          <p className="text-sm text-slate-700 dark:text-slate-300">{assignment.description}</p>
+        </div>
+      )}
 
       <h2 className="mb-2 font-semibold">Ishtirokchilar javoblari</h2>
       <div className="card overflow-x-auto">
@@ -58,22 +61,27 @@ export default function TeacherAssignmentDetailPage() {
           <thead className="border-b border-slate-100 text-xs uppercase text-slate-500 dark:border-slate-800">
             <tr>
               <th className="px-4 py-3">Ism</th>
-              <th className="px-4 py-3">Fayl</th>
+              {assignment.type !== "TEST" && <th className="px-4 py-3">Fayl</th>}
               <th className="px-4 py-3">Ball</th>
               <th className="px-4 py-3">Holat</th>
-              <th className="px-4 py-3" />
+              {assignment.type !== "TEST" && <th className="px-4 py-3" />}
             </tr>
           </thead>
           <tbody>
             {assignment.submissions.map((s) => (
               <tr key={s.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                 <td className="px-4 py-3 font-medium">{s.studentName}</td>
-                <td className="px-4 py-3 text-brand-700 dark:text-brand-400">
-                  <a href={fileUrl(s.fileId)} className="inline-flex items-center gap-1 hover:underline">
-                    <Icon path={paths.download} className="h-4 w-4" /> {s.fileName}
-                  </a>
+                {assignment.type !== "TEST" && (
+                  <td className="px-4 py-3 text-brand-700 dark:text-brand-400">
+                    <a href={fileUrl(s.fileId)} className="inline-flex items-center gap-1 hover:underline">
+                      <Icon path={paths.download} className="h-4 w-4" /> {s.fileName}
+                    </a>
+                  </td>
+                )}
+                <td className="px-4 py-3">
+                  {s.score ?? "—"}
+                  {assignment.type === "TEST" && s.score != null && ` / ${assignment.maxScore}`}
                 </td>
-                <td className="px-4 py-3">{s.score ?? "—"}</td>
                 <td className="px-4 py-3">
                   <span
                     className={`badge ${
@@ -85,16 +93,18 @@ export default function TeacherAssignmentDetailPage() {
                     {s.status === "REVIEWED" ? "Tekshirilgan" : "Tekshirilmagan"}
                   </span>
                 </td>
-                <td className="px-4 py-3">
-                  <button onClick={() => openGrade(s)} className="text-sm text-brand-700 hover:underline dark:text-brand-400">
-                    Baholash
-                  </button>
-                </td>
+                {assignment.type !== "TEST" && (
+                  <td className="px-4 py-3">
+                    <button onClick={() => openGrade(s)} className="text-sm text-brand-700 hover:underline dark:text-brand-400">
+                      Baholash
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {assignment.submissions.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={assignment.type === "TEST" ? 3 : 5} className="px-4 py-6 text-center text-slate-500">
                   Hali javob yuborilmagan
                 </td>
               </tr>

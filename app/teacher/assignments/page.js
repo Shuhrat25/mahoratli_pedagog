@@ -14,11 +14,14 @@ export default function TeacherAssignmentsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [assignmentType, setAssignmentType] = useState("FILE");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [maxScore, setMaxScore] = useState(100);
   const [dueDate, setDueDate] = useState("");
+  const [testFile, setTestFile] = useState(null);
   const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   function reload() {
     return assignmentsApi.list().then(({ assignments }) => setAssignments(assignments));
@@ -43,36 +46,51 @@ export default function TeacherAssignmentsPage() {
 
   function openCreate() {
     setEditing(null);
+    setAssignmentType("FILE");
     setTitle("");
     setDescription("");
     setMaxScore(100);
     setDueDate("");
+    setTestFile(null);
     setFormError("");
     setOpen(true);
   }
   function openEdit(a) {
     setEditing(a);
+    setAssignmentType(a.type);
     setTitle(a.title);
     setDescription(a.description);
     setMaxScore(a.maxScore);
     setDueDate(a.dueDate?.slice(0, 16) || "");
+    setTestFile(null);
     setFormError("");
     setOpen(true);
   }
   async function save(e) {
     e.preventDefault();
-    if (!description.trim() && !editing?.materials?.length) {
+    if (assignmentType === "FILE" && !description.trim() && !editing?.materials?.length) {
       setFormError("Tavsif yoki materiallardan kamida bittasi to'ldirilishi shart");
       return;
     }
+    setSaving(true);
+    setFormError("");
     try {
-      const payload = { title, description, maxScore, dueDate };
+      const payload = { title, description, type: assignmentType, maxScore, dueDate };
+      let assignmentId = editing?.id;
       if (editing) await assignmentsApi.update(editing.id, payload);
-      else await assignmentsApi.create({ ...payload, steps: [] });
+      else assignmentId = (await assignmentsApi.create({ ...payload, steps: [] })).assignment.id;
+
+      if (assignmentType === "TEST" && testFile) {
+        const formData = new FormData();
+        formData.append("file", testFile);
+        await assignmentsApi.importTest(assignmentId, formData);
+      }
       await reload();
       setOpen(false);
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Xatolik yuz berdi");
+    } finally {
+      setSaving(false);
     }
   }
   async function remove(id) {
@@ -111,7 +129,8 @@ export default function TeacherAssignmentsPage() {
               <Link href={`/teacher/assignments/${a.id}`} className="min-w-0 flex-1">
                 <p className="font-medium">{a.title}</p>
                 <p className="text-xs text-slate-500">
-                  Max: {a.maxScore} · {a.submissions.length} javob{notReviewed > 0 && ` · ${notReviewed} tekshirilmagan`}
+                  {a.type === "TEST" ? `Test · ${a.questions?.length || 0} savol` : "Fayl"} · Max: {a.maxScore} · {a.submissions.length}{" "}
+                  javob{notReviewed > 0 && ` · ${notReviewed} tekshirilmagan`}
                 </p>
               </Link>
               <span className={`badge shrink-0 ${closed ? "bg-slate-100 text-slate-500 dark:bg-slate-800" : "bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300"}`}>
@@ -130,9 +149,31 @@ export default function TeacherAssignmentsPage() {
             <input value={title} onChange={(e) => setTitle(e.target.value)} className="input" required />
           </div>
           <div>
-            <label className="label">Tavsif</label>
+            <label className="label">Turi</label>
+            <select value={assignmentType} onChange={(e) => setAssignmentType(e.target.value)} className="input" disabled={!!editing}>
+              <option value="FILE">Fayl topshirish (qo'lda baholanadi)</option>
+              <option value="TEST">Test (avtomatik baholanadi)</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Tavsif{assignmentType === "TEST" && " (ixtiyoriy)"}</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="input" rows={4} />
           </div>
+
+          {assignmentType === "TEST" && (
+            <div>
+              <label className="label">
+                Test fayli (DOCX, PDF yoki TXT) — <code>~</code> to'g'ri, <code>==</code> noto'g'ri, <code>++++</code> ajratuvchi formatida
+              </label>
+              <input type="file" accept=".docx,.pdf,.txt" onChange={(e) => setTestFile(e.target.files?.[0] || null)} className="input" />
+              <p className="mt-1 text-xs text-slate-500">
+                Faylda bir nechta savol bo'lishi mumkin — talaba ularning barchasiga javob beradi, umumiy natijaga qarab ball avtomatik
+                hisoblanadi.
+                {editing && ` Fayl tanlanmasa, mavjud ${editing.questions?.length || 0} savol saqlanadi.`}
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Maksimal baho</label>
@@ -144,8 +185,8 @@ export default function TeacherAssignmentsPage() {
             </div>
           </div>
           {formError && <p className="text-sm text-red-600">{formError}</p>}
-          <button type="submit" className="btn-primary w-full">
-            Saqlash
+          <button type="submit" className="btn-primary w-full" disabled={saving}>
+            {saving ? "Saqlanmoqda..." : "Saqlash"}
           </button>
         </form>
       </Modal>

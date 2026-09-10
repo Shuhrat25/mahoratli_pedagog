@@ -93,8 +93,15 @@ export default function LessonPage() {
       </div>
 
       {lesson.type === "VIDEO" && (
-        <div className="aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-sm">
-          <iframe src={lesson.videoUrl} title={lesson.title} className="h-full w-full" allowFullScreen />
+        <div className="space-y-4">
+          <div className="aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-sm">
+            <iframe src={lesson.videoUrl} title={lesson.title} className="h-full w-full" allowFullScreen />
+          </div>
+          {lesson.content && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <p className="whitespace-pre-line leading-relaxed text-slate-700 dark:text-slate-300">{lesson.content}</p>
+            </div>
+          )}
         </div>
       )}
 

@@ -74,7 +74,7 @@ export default function TeacherTopicLessonsPage() {
     try {
       let lessonId = editing?.id;
       if (lessonType === "VIDEO") {
-        const payload = { title, type: "VIDEO", videoUrl: toYoutubeEmbed(videoUrl) };
+        const payload = { title, type: "VIDEO", videoUrl: toYoutubeEmbed(videoUrl), content };
         if (editing) await topicsApi.updateLesson(topicId, editing.id, payload);
         else lessonId = (await topicsApi.createLesson(topicId, payload)).lesson.id;
       } else if (lessonType === "TEXT") {
@@ -164,9 +164,15 @@ export default function TeacherTopicLessonsPage() {
           </div>
 
           {lessonType === "VIDEO" && (
-            <div>
-              <label className="label">YouTube havolasi</label>
-              <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} className="input" placeholder="https://youtube.com/watch?v=..." required={!editing} />
+            <div className="space-y-3">
+              <div>
+                <label className="label">YouTube havolasi</label>
+                <input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} className="input" placeholder="https://youtube.com/watch?v=..." required={!editing} />
+              </div>
+              <div>
+                <label className="label">Tavsif (ixtiyoriy)</label>
+                <textarea value={content} onChange={(e) => setContent(e.target.value)} className="input" rows={4} placeholder="Video haqida qisqacha tavsif" />
+              </div>
             </div>
           )}
 

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useApp } from "@/lib/auth-context";
-import ThemeToggle from "@/components/ThemeToggle";
 import UniversityAutocomplete from "@/components/UniversityAutocomplete";
 
 export default function StudentProfilePage() {
@@ -26,9 +25,8 @@ export default function StudentProfilePage() {
 
   return (
     <div className="max-w-lg">
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5">
         <h1 className="text-2xl font-extrabold">Profil</h1>
-        <ThemeToggle />
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">

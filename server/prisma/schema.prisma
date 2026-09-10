@@ -171,16 +171,40 @@ model LessonProgress {
   @@unique([lessonId, userId])
 }
 
+// type: "FILE" (talaba fayl yuklab topshiradi, o'qituvchi qo'lda baholaydi)
+// yoki "TEST" (o'qituvchi ~ == ++++ formatidagi fayl yuklaydi, talaba
+// savollarga javob beradi, ball avtomatik hisoblanadi — darslardagi TEST
+// darsi bilan bir xil mantiq, lekin alohida vazifa sifatida).
 model Assignment {
   id          String            @id @default(cuid())
   title       String
   description String
+  type        String            @default("FILE")
   maxScore    Int
   dueDate     DateTime
   createdAt   DateTime          @default(now())
   steps       AssignmentStep[]
   materials   AssignmentMaterial[]
+  questions   AssignmentQuestion[]
   submissions Submission[]
+}
+
+model AssignmentQuestion {
+  id           String                   @id @default(cuid())
+  assignmentId String
+  assignment   Assignment               @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  text         String
+  order        Int                      @default(0)
+  options      AssignmentQuestionOption[]
+}
+
+model AssignmentQuestionOption {
+  id         String             @id @default(cuid())
+  questionId String
+  question   AssignmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  correct    Boolean            @default(false)
+  order      Int                @default(0)
 }
 
 model AssignmentStep {
@@ -206,8 +230,9 @@ model Submission {
   assignment   Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   studentId    String
   student      User              @relation(fields: [studentId], references: [id])
-  fileId       String
-  file         UploadedFile      @relation(fields: [fileId], references: [id])
+  // TEST turidagi vazifada fayl bo'lmaydi — ball avtomatik hisoblanadi.
+  fileId       String?
+  file         UploadedFile?     @relation(fields: [fileId], references: [id])
   submittedAt  DateTime          @default(now())
   score        Int?
   comment      String?
