@@ -6,8 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { topicsApi } from "@/lib/api";
 import { Icon, paths } from "@/components/icons";
 
-const TYPE_ICON = { VIDEO: paths.lessons, TEXT: paths.materials, TEST: paths.assignments };
-const TYPE_LABEL = { VIDEO: "Video", TEXT: "Matn", TEST: "Test" };
+const TYPE_ICON = { VIDEO: paths.lessons, TEXT: paths.materials, TEST: paths.assignments, LIVE: paths.live };
+const TYPE_LABEL = { VIDEO: "Video", TEXT: "Matn", TEST: "Test", LIVE: "Jonli dars" };
 
 export default function TopicLessonsPage() {
   const { topicId } = useParams();

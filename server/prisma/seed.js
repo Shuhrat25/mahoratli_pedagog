@@ -24,6 +24,9 @@ async function placeholderFile(originalName, content, uploadedById) {
 async function main() {
   console.log("Tozalanmoqda...");
   await prisma.$transaction([
+    prisma.notification.deleteMany(),
+    prisma.dailyActivity.deleteMany(),
+    prisma.lessonMaterial.deleteMany(),
     prisma.forumReply.deleteMany(),
     prisma.forumThread.deleteMany(),
     prisma.submission.deleteMany(),
@@ -205,11 +208,40 @@ async function main() {
     await prisma.material.create({ data: { title, fileId: file.id, uploadedById: teacher.id } });
   }
 
+  console.log("Jonli dars...");
+  const firstTopic = await prisma.topic.findFirst({ orderBy: { order: "asc" } });
+  if (firstTopic) {
+    const lessonCount = await prisma.lesson.count({ where: { topicId: firstTopic.id } });
+    await prisma.lesson.create({
+      data: {
+        topicId: firstTopic.id,
+        title: "Jonli uchrashuv: savol-javob",
+        type: "LIVE",
+        order: lessonCount,
+        meetingUrl: "https://meet.google.com/abc-defg-hij",
+        startsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+        content: "<p>Uchrashuvga <b>savollaringizni</b> tayyorlab keling.</p>",
+      },
+    });
+  }
+
   console.log("Forum...");
-  const f1 = await prisma.forumThread.create({ data: { title: "Komiks yaratishda qaysi vositani tavsiya qilasiz: Canva yoki ComicGen?", authorId: student2.id } });
+  const f1 = await prisma.forumThread.create({
+    data: {
+      title: "Komiks yaratishda qaysi vositani tavsiya qilasiz: Canva yoki ComicGen?",
+      body: "<p>Ikkalasini ham sinab ko'rdim, lekin qaysi biri boshlang'ich sinf o'quvchilari uchun qulayroq ekanini bilmoqchiman.</p>",
+      authorId: student2.id,
+    },
+  });
   await prisma.forumReply.create({ data: { threadId: f1.id, authorId: student3.id, text: "Menimcha Canva qulayroq, tayyor shablonlar ko'p." } });
   await prisma.forumReply.create({ data: { threadId: f1.id, authorId: teacher.id, text: "Ikkalasi ham yaxshi, lekin milliy kiyim elementlarini qo'shishda Canva'ning galereyasi boyroq." } });
-  await prisma.forumThread.create({ data: { title: "Keys-vaziyat tahlili bo'yicha savolim bor", authorId: student3.id } });
+  await prisma.forumThread.create({
+    data: {
+      title: "Keys-vaziyat tahlili bo'yicha savolim bor",
+      body: "<p>Tahlilni qanday tuzilishda yozish kerak — muammo, yechim, xulosa tartibidami?</p>",
+      authorId: student3.id,
+    },
+  });
 
   console.log("Tayyor!");
 }

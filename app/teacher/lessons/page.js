@@ -5,9 +5,11 @@ import Link from "next/link";
 import { topicsApi } from "@/lib/api";
 import Modal from "@/components/Modal";
 import KebabMenu from "@/components/KebabMenu";
+import { useToast } from "@/components/ToastProvider";
 import { Icon, paths } from "@/components/icons";
 
 export default function TeacherLessonsPage() {
+  const { success, error: toastError, confirm } = useToast();
   const [topics, setTopics] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
@@ -44,10 +46,20 @@ export default function TeacherLessonsPage() {
     await reload();
     setOpen(false);
   }
-  async function remove(id) {
-    if (!window.confirm("Mavzu va undagi barcha darslar o'chirilsinmi?")) return;
-    await topicsApi.remove(id);
-    await reload();
+  async function remove(topic) {
+    const ok = await confirm({
+      title: "Mavzu o'chirilsinmi?",
+      description: `${topic.title} — undagi ${topic.lessons.length} ta dars ham o'chadi.`,
+      confirmLabel: "O'chirish",
+    });
+    if (!ok) return;
+    try {
+      await topicsApi.remove(topic.id);
+      await reload();
+      success("Mavzu o'chirildi");
+    } catch (err) {
+      toastError(err.message || "O'chirib bo'lmadi");
+    }
   }
   async function move(id, dir) {
     await topicsApi.move(id, dir);
@@ -78,7 +90,7 @@ export default function TeacherLessonsPage() {
               <p className="font-medium">{t.title}</p>
               <p className="text-xs text-slate-500">{t.lessons.length} dars</p>
             </Link>
-            <KebabMenu onEdit={() => openEdit(t)} onDelete={() => remove(t.id)} />
+            <KebabMenu onEdit={() => openEdit(t)} onDelete={() => remove(t)} />
           </div>
         ))}
       </div>

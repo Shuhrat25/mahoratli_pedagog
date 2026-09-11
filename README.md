@@ -17,10 +17,20 @@ The app's interface is in Uzbek (Latin script), built around a national-values c
 **Student**
 - Home feed: banners (optionally with a background image), teacher posts (like/comment),
   and live-updating polls
-- Lessons: topics → lessons (video / text / test), unlocked sequentially — **enforced
-  server-side**, not just hidden in the UI
+- Home feed with search, tag filtering and pagination
+- Lessons: topics → lessons (video / text / test / **live**), unlocked sequentially —
+  **enforced server-side**, not just hidden in the UI. A test lesson only unlocks the next
+  one once its pass mark is reached
+- Live lessons: an external meeting link (Zoom / Meet) with a start time; the join button
+  opens 15 minutes beforehand and every student gets a notification when one is scheduled
+- Downloadable per-lesson attachments (slides, PDFs, worksheets)
+- Optional test timer, shuffled questions, attempt limits, and multiple-correct-answer
+  questions (a question with several `~` lines becomes a checkbox question)
+- Certificate page once every lesson is complete (print / save as PDF)
 - Auto-graded tests, including bulk import from a DOCX/PDF/TXT file using a simple markup
   format (`~` correct answer, `==` incorrect answer, `++++` question separator)
+- In-app notifications (new assignment, grade received, deadline in under 24h, forum reply,
+  new post, scheduled live lesson) delivered instantly over WebSocket
 - Assignments with file upload, grading, and comments from the teacher
 - Downloadable materials
 - Forum (create threads, reply)
@@ -28,16 +38,21 @@ The app's interface is in Uzbek (Latin script), built around a national-values c
 
 **Teacher / Admin**
 - Dashboard: student count, live online count (via WebSocket presence), open assignments,
-  visits chart
+  ungraded submissions, and a **real** 30-day visits chart (daily unique users)
+- Student progress board: who is on which lesson, completion %, average test score
 - Participants management (create/edit/delete, role-based restrictions — see below)
-- Home page content management: banners, posts (title + optional description, image, or
-  YouTube embed — blog-style), polls
+- Blog management: banners, posts and polls. Posts support drafts, scheduled publishing,
+  tags, pinning to the top of the feed, a cover image, reading time, and a public
+  permalink at `/post/<id>` that is server-rendered with Open Graph tags so the link
+  previews correctly when shared
+- Polls can be turned into quizzes — the correct answer is revealed after voting
 - Lessons/topics management with drag-style reordering and the DOCX/PDF test importer
 - **Rich text everywhere the teacher writes** — a dependency-free WYSIWYG editor
   (headings, lists, quotes, code blocks, colours/highlight, alignment, links,
   fullscreen) on banners, posts, lesson content, assignment descriptions, grading
   comments and forum posts. Students still get plain inputs.
 - Assignment creation and grading (grades feed into a student point/rating system)
+- Grade export to CSV (opens directly in Excel)
 - Materials management (batch upload)
 - Forum moderation
 
@@ -149,6 +164,7 @@ The app runs at `http://localhost:3000`.
 |---|---|
 | `BACKEND_URL` | Backend origin, **no `/api` suffix, no trailing slash** (e.g. `http://localhost:4000` or `https://your-api.onrender.com`). Server-side only — used by the `/api/*` rewrite proxy in `next.config.js`, never sent to the browser. |
 | `NEXT_PUBLIC_WS_URL` | Full WebSocket URL for the online-presence connection (e.g. `ws://localhost:4000/ws` or `wss://your-api.onrender.com/ws`) |
+| `NEXT_PUBLIC_SITE_URL` | Public origin of the frontend (e.g. `https://mahoratli-pedagog.vercel.app`). Used to build absolute Open Graph image URLs for shared post links. Optional locally; **set it in production**, otherwise link previews have no image. |
 
 ### Why a proxy, not a direct API URL
 
@@ -176,7 +192,9 @@ the proxy.
   cookie bug. Redeploy after changing env vars; `NEXT_PUBLIC_*` values are baked in at build
   time, so restarting isn't enough.
 - **Backend → Render** (or any Node host): root directory `server/`, build command
-  `npm install && npx prisma migrate deploy`, start command `npm start`. Set the server env
+  `npm install && npx prisma migrate deploy`, start command `npm start`. `migrate deploy`
+  applies any pending migration on every deploy, including the blog / live-lesson /
+  notifications one. Set the server env
   vars above, with `NODE_ENV=production` and `CLIENT_ORIGIN` set to your Vercel URL
   (comma-separated with `http://localhost:3000` too if you want local dev to also reach this
   deployed backend directly for testing).
@@ -211,9 +229,40 @@ HTML is sanitised **twice**, against a tag/attribute allowlist:
 `<script>`, `<iframe>`, every `on*` handler, `javascript:` URLs and CSS `url()` are
 stripped; surviving `<a>` tags get `target="_blank" rel="noopener noreferrer nofollow"`.
 
+## Uploads, rate limiting and other guardrails
+
+- **Upload size**: students are capped at **10 MB** per file and to a list of document /
+  image / audio / video / archive types. Teachers and admins have **no size limit** (they
+  upload large course material) and only executable file types are blocked. The two limits
+  are two `multer` instances picked per request by role — see `server/src/middleware/upload.js`.
+- **Rate limiting**: `/auth/login`, `/auth/send-code`, `/auth/verify-code` and registration
+  are throttled in memory (`server/src/lib/rateLimit.js`). Password reset never reveals
+  whether an email is registered.
+- **Passwords** must be at least 8 characters with a letter and a digit — enforced on the
+  server, mirrored in the UI with a strength meter.
+- **Errors**: Prisma failures are mapped to real HTTP statuses (404 / 409 / 400) instead of
+  a blanket 500 — see `server/src/lib/httpError.js`.
+- **Presence** survives restarts: it combines open WebSockets with a `User.lastSeenAt`
+  column, and a ping/pong heartbeat drops connections that died behind a proxy.
+
+## Tests
+
+```bash
+cd server
+npm test
+```
+
+Runs on the built-in Node test runner (no test framework dependency). Covers the HTML
+sanitiser against an XSS attack corpus — **both** the server and the browser
+implementation, asserting they agree — the lesson-unlocking rules, the test-markup parser,
+CSV escaping, password rules, Prisma error mapping and the rate limiter.
+
 ## Known limitations
 
 - Email sending is feature-flagged off by default (`EMAIL_SENDING_ENABLED=false`) until a
   custom domain is verified with Resend — until then, verification codes are shown
   on-screen instead of emailed.
-- No automated test suite yet.
+- Open-ended (free-text) test questions are not supported — tests are multiple choice
+  only. Adding them needs answer storage plus a manual grading flow, i.e. its own feature.
+- Rate limiting and WebSocket presence are per-process. On a single instance (Render free
+  tier) that is correct; scaling to several instances would need Redis.

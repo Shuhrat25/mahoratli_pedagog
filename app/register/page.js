@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { validatePassword, PasswordStrength } from "@/lib/passwordRules";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/lib/auth-context";
@@ -47,6 +48,13 @@ export default function RegisterPage() {
 
   function handleStep1Submit(e) {
     e.preventDefault();
+    // Parol talablari serverda ham tekshiriladi — bu yerdagisi tezroq javob
+    // berish uchun (ilgari hech qanday talab yo'q edi, "1" ham o'tardi).
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setFormError(passwordError);
+      return;
+    }
     if (password !== password2) {
       setFormError("Parollar mos kelmadi");
       return;
@@ -130,8 +138,9 @@ export default function RegisterPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="input"
                 required
-                minLength={6}
+                minLength={8}
               />
+              <PasswordStrength password={password} />
             </div>
             <div>
               <label className="label">Parolni takrorlang</label>
@@ -141,7 +150,7 @@ export default function RegisterPage() {
                 onChange={(e) => setPassword2(e.target.value)}
                 className="input"
                 required
-                minLength={6}
+                minLength={8}
               />
             </div>
             {formError && <p className="text-sm text-red-600">{formError}</p>}

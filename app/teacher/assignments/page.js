@@ -6,10 +6,12 @@ import { assignmentsApi, ApiError } from "@/lib/api";
 import Modal from "@/components/Modal";
 import KebabMenu from "@/components/KebabMenu";
 import RichTextEditor from "@/components/RichTextEditor";
+import { useToast } from "@/components/ToastProvider";
 import { isEmptyHtml } from "@/lib/richText";
 import { Icon, paths } from "@/components/icons";
 
 export default function TeacherAssignmentsPage() {
+  const { success, error: toastError, confirm } = useToast();
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -95,19 +97,34 @@ export default function TeacherAssignmentsPage() {
       setSaving(false);
     }
   }
-  async function remove(id) {
-    if (!window.confirm("Vazifa o'chirilsinmi?")) return;
-    await assignmentsApi.remove(id);
-    await reload();
+  async function remove(assignment) {
+    const ok = await confirm({
+      title: "Vazifa o'chirilsinmi?",
+      description: `${assignment.title} — yuborilgan javoblar ham o'chadi.`,
+      confirmLabel: "O'chirish",
+    });
+    if (!ok) return;
+    try {
+      await assignmentsApi.remove(assignment.id);
+      await reload();
+      success("Vazifa o'chirildi");
+    } catch (err) {
+      toastError(err.message || "O'chirib bo'lmadi");
+    }
   }
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Vazifalar</h1>
+        <div className="flex flex-wrap gap-2">
+        <a href={assignmentsApi.exportUrl()} download className="btn-secondary">
+          <Icon path={paths.download} className="h-4 w-4" /> Baholar (CSV)
+        </a>
         <button onClick={openCreate} className="btn-primary">
           <Icon path={paths.plus} className="h-4 w-4" /> Vazifa yaratish
         </button>
+        </div>
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -138,7 +155,7 @@ export default function TeacherAssignmentsPage() {
               <span className={`badge shrink-0 ${closed ? "bg-slate-100 text-slate-500 dark:bg-slate-800" : "bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300"}`}>
                 {closed ? "Yopilgan" : "Ochiq"}
               </span>
-              <KebabMenu onEdit={() => openEdit(a)} onDelete={() => remove(a.id)} />
+              <KebabMenu onEdit={() => openEdit(a)} onDelete={() => remove(a)} />
             </div>
           );
         })}

@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { materialsApi } from "@/lib/api";
 import KebabMenu from "@/components/KebabMenu";
 import Modal from "@/components/Modal";
+import { useToast } from "@/components/ToastProvider";
 import { Icon, paths } from "@/components/icons";
 
 export default function TeacherMaterialsPage() {
+  const { success, error: toastError, confirm } = useToast();
   const [materials, setMaterials] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -36,17 +38,30 @@ export default function TeacherMaterialsPage() {
     const formData = new FormData();
     files.forEach((f) => formData.append("files", f));
     try {
-      await materialsApi.upload(formData);
+      const { materials: added } = await materialsApi.upload(formData);
       await reload();
+      success(`${added.length} ta fayl yuklandi`);
+    } catch (err) {
+      toastError(err.message || "Yuklab bo'lmadi");
     } finally {
       setUploading(false);
     }
   }
 
-  async function remove(id) {
-    if (!window.confirm("Material o'chirilsinmi?")) return;
-    await materialsApi.remove(id);
-    await reload();
+  async function remove(material) {
+    const ok = await confirm({
+      title: "Material o'chirilsinmi?",
+      description: material.title,
+      confirmLabel: "O'chirish",
+    });
+    if (!ok) return;
+    try {
+      await materialsApi.remove(material.id);
+      await reload();
+      success("Material o'chirildi");
+    } catch (err) {
+      toastError(err.message || "O'chirib bo'lmadi");
+    }
   }
 
   function openEdit(m) {
@@ -87,7 +102,7 @@ export default function TeacherMaterialsPage() {
                 {m.type} · {m.size} · {new Date(m.uploadedAt).toLocaleDateString("uz-UZ")}
               </p>
             </div>
-            <KebabMenu onEdit={() => openEdit(m)} onDelete={() => remove(m.id)} />
+            <KebabMenu onEdit={() => openEdit(m)} onDelete={() => remove(m)} />
           </div>
         ))}
       </div>

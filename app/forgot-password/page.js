@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { validatePassword, PasswordStrength } from "@/lib/passwordRules";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authApi, ApiError } from "@/lib/api";
@@ -42,6 +43,11 @@ export default function ForgotPasswordPage() {
 
   async function submitReset(e) {
     e.preventDefault();
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
+      return;
+    }
     if (password !== password2) {
       setError("Parollar mos kelmadi");
       return;
@@ -101,7 +107,8 @@ export default function ForgotPasswordPage() {
           <form onSubmit={submitReset} className="space-y-4">
             <div>
               <label className="label">Yangi parol</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" required minLength={6} />
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="input" required minLength={8} />
+              <PasswordStrength password={password} />
             </div>
             <div>
               <label className="label">Yangi parolni takrorlang</label>

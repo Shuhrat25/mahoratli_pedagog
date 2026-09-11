@@ -3,6 +3,7 @@ const prisma = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { upload } = require("../middleware/upload");
 const { createUploadedFileRecord } = require("../lib/uploadedFile");
+const { HttpError, route } = require("../lib/httpError");
 
 const router = express.Router();
 
@@ -17,13 +18,13 @@ function shapeMaterial(m) {
   };
 }
 
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuth, route(async (req, res) => {
   const materials = await prisma.material.findMany({ include: { file: true }, orderBy: { uploadedAt: "desc" } });
   res.json({ materials: materials.map(shapeMaterial) });
-});
+}));
 
-router.post("/", requireRole("ADMIN", "TEACHER"), upload.array("files", 20), async (req, res) => {
-  if (!req.files || req.files.length === 0) return res.status(400).json({ error: "Fayl talab qilinadi" });
+router.post("/", requireRole("ADMIN", "TEACHER"), upload.array("files", 20), route(async (req, res) => {
+  if (!req.files || req.files.length === 0) throw new HttpError(400, "Fayl talab qilinadi");
   const created = [];
   for (const f of req.files) {
     const file = await createUploadedFileRecord(f, req.user.id);
@@ -34,9 +35,9 @@ router.post("/", requireRole("ADMIN", "TEACHER"), upload.array("files", 20), asy
     created.push(shapeMaterial(material));
   }
   res.status(201).json({ materials: created });
-});
+}));
 
-router.patch("/:id", requireRole("ADMIN", "TEACHER"), async (req, res) => {
+router.patch("/:id", requireRole("ADMIN", "TEACHER"), route(async (req, res) => {
   const { title } = req.body;
   const material = await prisma.material.update({
     where: { id: req.params.id },
@@ -44,11 +45,11 @@ router.patch("/:id", requireRole("ADMIN", "TEACHER"), async (req, res) => {
     include: { file: true },
   });
   res.json({ material: shapeMaterial(material) });
-});
+}));
 
-router.delete("/:id", requireRole("ADMIN", "TEACHER"), async (req, res) => {
+router.delete("/:id", requireRole("ADMIN", "TEACHER"), route(async (req, res) => {
   await prisma.material.delete({ where: { id: req.params.id } });
   res.json({ ok: true });
-});
+}));
 
 module.exports = router;

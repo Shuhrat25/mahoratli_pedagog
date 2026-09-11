@@ -24,6 +24,9 @@ export const paths = {
   upload: "M12 21V9m0 0l-4 4m4-4l4 4M4 3h16",
   lock: "M5 11h14v10H5zM8 11V7a4 4 0 118 0v4",
   check: "M20 6L9 17l-5-5",
+  chart: "M3 3v18h18M7 15l4-4 3 3 5-6",
+  certificate: "M12 15a5 5 0 100-10 5 5 0 000 10zM8.5 13.5L7 22l5-2.5L17 22l-1.5-8.5",
+  live: "M15 10l4.5-2.5v9L15 14M4 6h9a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2z",
   chevronRight: "M9 18l6-6-6-6",
   chevronLeft: "M15 18l-6-6 6-6",
 };

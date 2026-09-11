@@ -1,23 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useApp } from "@/lib/auth-context";
 import ThemeToggle from "./ThemeToggle";
+import NotificationBell from "./NotificationBell";
 import { Icon, paths } from "./icons";
 
 export default function AppShell({ navItems, roleLabel, children }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { currentUser, logout } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // logout() o'zi mehmon bosh sahifasiga to'liq qayta yuklash bilan o'tadi —
+  // bu yerda qo'shimcha router.push kerak emas (ular poygaga tushardi).
   async function handleLogout() {
     await logout();
-    router.push("/");
   }
 
+  const basePath = currentUser?.role === "STUDENT" ? "/student" : "/teacher";
   const profileHref = currentUser?.role === "STUDENT" ? "/student/profile" : "/teacher";
 
   return (
@@ -28,7 +30,10 @@ export default function AppShell({ navItems, roleLabel, children }) {
           <Icon path={paths.menu} className="h-6 w-6" />
         </button>
         <span className="font-semibold text-brand-700 dark:text-brand-400">Mahoratli pedagog</span>
-        <ThemeToggle />
+        <div className="flex items-center gap-1">
+          <NotificationBell basePath={basePath} />
+          <ThemeToggle />
+        </div>
       </div>
 
       <div className="flex">
@@ -68,7 +73,8 @@ export default function AppShell({ navItems, roleLabel, children }) {
         )}
 
         <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
-          <div className="mb-4 hidden items-center justify-end gap-3 lg:flex">
+          <div className="mb-4 hidden items-center justify-end gap-2 lg:flex">
+            <NotificationBell basePath={basePath} />
             <ThemeToggle />
           </div>
           {children}

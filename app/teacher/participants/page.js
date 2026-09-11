@@ -6,12 +6,14 @@ import { usersApi, ApiError } from "@/lib/api";
 import ParticipantModal from "@/components/ParticipantModal";
 import Modal from "@/components/Modal";
 import KebabMenu from "@/components/KebabMenu";
+import { useToast } from "@/components/ToastProvider";
 import { Icon, paths } from "@/components/icons";
 
 const ROLE_LABEL = { TEACHER: "O'qituvchi", ADMIN: "Admin", STUDENT: "O'quvchi" };
 
 export default function ParticipantsPage() {
   const { currentUser } = useApp();
+  const { success, error: toastError, confirm } = useToast();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -84,9 +86,19 @@ export default function ParticipantsPage() {
 
   async function handleDelete(user) {
     if (user.role === "TEACHER" && !isMainTeacher) return;
-    if (!window.confirm(`${user.firstName} ${user.lastName} o'chirilsinmi?`)) return;
-    await usersApi.remove(user.id);
-    await reload();
+    const ok = await confirm({
+      title: "Ishtirokchi o'chirilsinmi?",
+      description: `${user.firstName} ${user.lastName} — barcha javoblari va natijalari ham o'chadi.`,
+      confirmLabel: "O'chirish",
+    });
+    if (!ok) return;
+    try {
+      await usersApi.remove(user.id);
+      await reload();
+      success("Ishtirokchi o'chirildi");
+    } catch (err) {
+      toastError(err.message || "O'chirib bo'lmadi");
+    }
   }
 
   return (

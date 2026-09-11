@@ -12,27 +12,32 @@ datasource db {
 // PostgreSQL (prod) migration can reintroduce native enums if desired.
 
 model User {
-  id           String   @id @default(cuid())
-  role         String   @default("STUDENT")
-  login        String   @unique
+  id           String    @id @default(cuid())
+  role         String    @default("STUDENT")
+  login        String    @unique
   passwordHash String
   firstName    String
   lastName     String
   university   String?
-  email        String   @unique
-  points       Int      @default(0)
-  createdAt    DateTime @default(now())
+  email        String    @unique
+  points       Int       @default(0)
+  createdAt    DateTime  @default(now())
+  // WebSocket uzilib qolsa ham "onlayn" holati saqlanib qolishi uchun —
+  // presence endi faqat xotiradagi Map'ga bog'liq emas (src/lib/presence.js).
+  lastSeenAt   DateTime?
 
-  posts        Post[]
-  comments     Comment[]
-  postLikes    PostLike[]
-  pollVotes    PollVote[]
+  posts          Post[]
+  comments       Comment[]
+  postLikes      PostLike[]
+  pollVotes      PollVote[]
   lessonProgress LessonProgress[]
-  submissions  Submission[]
-  materials    Material[]
-  forumThreads ForumThread[]
-  forumReplies ForumReply[]
-  uploadedFiles UploadedFile[]
+  submissions    Submission[]
+  materials      Material[]
+  forumThreads   ForumThread[]
+  forumReplies   ForumReply[]
+  uploadedFiles  UploadedFile[]
+  notifications  Notification[]
+  dailyActivity  DailyActivity[]
 }
 
 model EmailVerification {
@@ -58,17 +63,24 @@ model Banner {
 // Blog-uslubidagi post: sarlavha majburiy, qolgan hammasi ixtiyoriy —
 // tavsif matni, rasm YOKI YouTube video havolasi (dars videosi kabi).
 model Post {
-  id        String    @id @default(cuid())
-  authorId  String
-  author    User      @relation(fields: [authorId], references: [id])
-  title     String
-  text      String?
-  videoUrl  String?
-  imageId   String?
-  image     UploadedFile? @relation(fields: [imageId], references: [id])
-  createdAt DateTime  @default(now())
-  likes     PostLike[]
-  comments  Comment[]
+  id          String        @id @default(cuid())
+  authorId    String
+  author      User          @relation(fields: [authorId], references: [id])
+  title       String
+  text        String?
+  videoUrl    String?
+  imageId     String?
+  image       UploadedFile? @relation(fields: [imageId], references: [id])
+  createdAt   DateTime      @default(now())
+  // Blog: qoralama / rejalashtirilgan e'lon / rukn (teg) / tepaga qadash.
+  // status: "DRAFT" yoki "PUBLISHED"; publishedAt kelajakda bo'lsa — post
+  // o'sha vaqt kelgunicha talabalarga ko'rinmaydi (rejalashtirilgan e'lon).
+  status      String        @default("PUBLISHED")
+  publishedAt DateTime?
+  pinned      Boolean       @default(false)
+  tags        String?
+  likes       PostLike[]
+  comments    Comment[]
 }
 
 model PostLike {
@@ -127,17 +139,37 @@ model Topic {
   lessons Lesson[]
 }
 
+// type: VIDEO | TEXT | TEST | LIVE
+// LIVE — jonli dars: tashqi uchrashuv havolasi (Zoom/Meet) va boshlanish vaqti.
 model Lesson {
-  id        String     @id @default(cuid())
-  topicId   String
-  topic     Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  title     String
-  type      String
-  videoUrl  String?
-  content   String?
-  order     Int        @default(0)
-  questions Question[]
-  progress  LessonProgress[]
+  id           String           @id @default(cuid())
+  topicId      String
+  topic        Topic            @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  title        String
+  type         String
+  videoUrl     String?
+  content      String?
+  order        Int              @default(0)
+  meetingUrl   String?
+  startsAt     DateTime?
+  // TEST sozlamalari: o'tish balli (%), vaqt chegarasi, savollarni aralashtirish,
+  // urinishlar soni (null — cheksiz).
+  passScore    Int              @default(60)
+  timeLimitSec Int?
+  shuffle      Boolean          @default(false)
+  maxAttempts  Int?
+  questions    Question[]
+  materials    LessonMaterial[]
+  progress     LessonProgress[]
+}
+
+model LessonMaterial {
+  id       String       @id @default(cuid())
+  lessonId String
+  lesson   Lesson       @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  fileId   String
+  file     UploadedFile @relation(fields: [fileId], references: [id])
+  order    Int          @default(0)
 }
 
 model Question {
@@ -166,6 +198,7 @@ model LessonProgress {
   user        User      @relation(fields: [userId], references: [id])
   completed   Boolean   @default(false)
   score       Int?
+  attempts    Int       @default(0)
   completedAt DateTime?
 
   @@unique([lessonId, userId])
@@ -176,13 +209,13 @@ model LessonProgress {
 // savollarga javob beradi, ball avtomatik hisoblanadi — darslardagi TEST
 // darsi bilan bir xil mantiq, lekin alohida vazifa sifatida).
 model Assignment {
-  id          String            @id @default(cuid())
+  id          String               @id @default(cuid())
   title       String
   description String
-  type        String            @default("FILE")
+  type        String               @default("FILE")
   maxScore    Int
   dueDate     DateTime
-  createdAt   DateTime          @default(now())
+  createdAt   DateTime             @default(now())
   steps       AssignmentStep[]
   materials   AssignmentMaterial[]
   questions   AssignmentQuestion[]
@@ -190,11 +223,11 @@ model Assignment {
 }
 
 model AssignmentQuestion {
-  id           String                   @id @default(cuid())
+  id           String                     @id @default(cuid())
   assignmentId String
-  assignment   Assignment               @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignment   Assignment                 @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   text         String
-  order        Int                      @default(0)
+  order        Int                        @default(0)
   options      AssignmentQuestionOption[]
 }
 
@@ -217,46 +250,49 @@ model AssignmentStep {
 }
 
 model AssignmentMaterial {
-  id           String     @id @default(cuid())
+  id           String       @id @default(cuid())
   assignmentId String
-  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignment   Assignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   fileId       String
   file         UploadedFile @relation(fields: [fileId], references: [id])
 }
 
 model Submission {
-  id           String            @id @default(cuid())
+  id           String        @id @default(cuid())
   assignmentId String
-  assignment   Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  assignment   Assignment    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   studentId    String
-  student      User              @relation(fields: [studentId], references: [id])
+  student      User          @relation(fields: [studentId], references: [id])
   // TEST turidagi vazifada fayl bo'lmaydi — ball avtomatik hisoblanadi.
   fileId       String?
-  file         UploadedFile?     @relation(fields: [fileId], references: [id])
-  submittedAt  DateTime          @default(now())
+  file         UploadedFile? @relation(fields: [fileId], references: [id])
+  submittedAt  DateTime      @default(now())
   score        Int?
   comment      String?
-  status       String            @default("NOT_REVIEWED")
+  status       String        @default("NOT_REVIEWED")
 
   @@unique([assignmentId, studentId])
 }
 
 model Material {
-  id         String       @id @default(cuid())
-  title      String
-  fileId     String
-  file       UploadedFile @relation(fields: [fileId], references: [id])
+  id           String       @id @default(cuid())
+  title        String
+  fileId       String
+  file         UploadedFile @relation(fields: [fileId], references: [id])
   uploadedById String
-  uploadedBy   User       @relation(fields: [uploadedById], references: [id])
-  uploadedAt DateTime     @default(now())
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
+  uploadedAt   DateTime     @default(now())
 }
 
 model ForumThread {
-  id        String        @id @default(cuid())
+  id        String       @id @default(cuid())
   title     String
+  // Mavzu matni. Ilgari u birinchi "javob" sifatida saqlanardi — o'sha javob
+  // o'chirilsa mavzu matnsiz qolardi.
+  body      String?
   authorId  String
-  author    User          @relation(fields: [authorId], references: [id])
-  createdAt DateTime      @default(now())
+  author    User         @relation(fields: [authorId], references: [id])
+  createdAt DateTime     @default(now())
   replies   ForumReply[]
 }
 
@@ -281,8 +317,38 @@ model UploadedFile {
   createdAt    DateTime @default(now())
 
   assignmentMaterials AssignmentMaterial[]
+  lessonMaterials     LessonMaterial[]
   submissions         Submission[]
   materials           Material[]
   banners             Banner[]
   posts               Post[]
+}
+
+// Ichki bildirishnomalar (yangi vazifa, baho, forumdagi javob, jonli dars...).
+// WebSocket orqali darhol yetkaziladi, o'qilmaganlari qo'ng'iroqchada sanaladi.
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+// Kunlik faollik — dashboarddagi "tashriflar" grafigi uchun HAQIQIY ma'lumot
+// (ilgari grafik Math.random() bilan chizilardi). Har bir foydalanuvchi uchun
+// kuniga bitta yozuv: presence.touch() uni upsert qiladi.
+model DailyActivity {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  day    String
+
+  @@unique([userId, day])
+  @@index([day])
 }

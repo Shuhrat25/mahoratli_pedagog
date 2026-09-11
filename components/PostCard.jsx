@@ -1,29 +1,71 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { postsApi, fileUrl } from "@/lib/api";
+import { useApp } from "@/lib/auth-context";
+import { useToast } from "@/components/ToastProvider";
 import RichText from "@/components/RichText";
 
-export default function PostCard({ post, onUpdate }) {
+function formatDate(value) {
+  return new Date(value).toLocaleDateString("uz-UZ", { day: "2-digit", month: "long", year: "numeric" });
+}
+
+export default function PostCard({ post, onUpdate, onTagClick }) {
+  const { currentUser } = useApp();
+  const { success, error: toastError } = useToast();
   const [commentText, setCommentText] = useState("");
   const [showComments, setShowComments] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const isStaff = currentUser?.role === "TEACHER" || currentUser?.role === "ADMIN";
+  const permalink = typeof window !== "undefined" ? `${window.location.origin}/post/${post.id}` : `/post/${post.id}`;
 
   async function toggleLike() {
-    const { post: updated } = await postsApi.like(post.id);
-    onUpdate(updated);
+    try {
+      const { post: updated } = await postsApi.like(post.id);
+      onUpdate(updated);
+    } catch (err) {
+      toastError(err.message || "Xatolik yuz berdi");
+    }
   }
 
   async function addComment(e) {
     e.preventDefault();
-    if (!commentText.trim()) return;
-    const { post: updated } = await postsApi.comment(post.id, commentText);
-    onUpdate(updated);
-    setCommentText("");
+    if (!commentText.trim() || busy) return;
+    setBusy(true);
+    try {
+      const { post: updated } = await postsApi.comment(post.id, commentText);
+      onUpdate(updated);
+      setCommentText("");
+    } catch (err) {
+      toastError(err.message || "Izohni yuborib bo'lmadi");
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function share() {
-    if (typeof window !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(window.location.href).catch(() => {});
+  async function removeComment(commentId) {
+    try {
+      const { post: updated } = await postsApi.removeComment(post.id, commentId);
+      onUpdate(updated);
+    } catch (err) {
+      toastError(err.message || "Izohni o'chirib bo'lmadi");
+    }
+  }
+
+  async function share() {
+    // Ilgari bu yerda lentaning umumiy manzili (window.location.href)
+    // nusxalanardi — havola postga olib bormasdi. Endi postning o'z sahifasi.
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: post.title, url: permalink });
+        return;
+      }
+      await navigator.clipboard.writeText(permalink);
+      success("Havola nusxalandi");
+    } catch {
+      // Foydalanuvchi ulashishni bekor qilgan bo'lishi mumkin — jim o'tkazamiz.
     }
   }
 
@@ -33,13 +75,52 @@ export default function PostCard({ post, onUpdate }) {
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
           {post.authorName.charAt(0)}
         </div>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">{post.authorName}</p>
-          <p className="text-xs text-slate-500">{new Date(post.createdAt).toLocaleDateString("uz-UZ")}</p>
+          <p className="text-xs text-slate-500">
+            {formatDate(post.publishedAt || post.createdAt)} · {post.readingMinutes} daq. o&apos;qish
+          </p>
         </div>
+        {post.pinned && (
+          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+            📌 Qadalgan
+          </span>
+        )}
+        {isStaff && post.status === "DRAFT" && (
+          <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+            Qoralama
+          </span>
+        )}
+        {isStaff && post.status === "PUBLISHED" && post.publishedAt && new Date(post.publishedAt) > new Date() && (
+          <span className="shrink-0 rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+            Rejalashtirilgan
+          </span>
+        )}
       </div>
-      <h3 className="mb-1.5 text-base font-bold">{post.title}</h3>
+
+      <h3 className="mb-1.5 text-base font-bold">
+        <Link href={`/post/${post.id}`} className="hover:text-indigo-600 hover:underline dark:hover:text-indigo-400">
+          {post.title}
+        </Link>
+      </h3>
+
+      {post.tags?.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {post.tags.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => onTagClick?.(tag)}
+              className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100 dark:bg-indigo-900/40 dark:text-indigo-300 dark:hover:bg-indigo-900/70"
+            >
+              #{tag}
+            </button>
+          ))}
+        </div>
+      )}
+
       {post.text && <RichText value={post.text} className="text-sm leading-relaxed text-slate-700 dark:text-slate-300" />}
+
       {post.videoUrl && (
         <div className="mt-3 aspect-video w-full overflow-hidden rounded-xl bg-black">
           <iframe src={post.videoUrl} title={post.title} className="h-full w-full" allowFullScreen />
@@ -49,6 +130,7 @@ export default function PostCard({ post, onUpdate }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img src={fileUrl(post.imageId)} alt={post.title} className="mt-3 w-full rounded-xl object-cover" />
       )}
+
       <div className="mt-4 flex items-center gap-5 border-t border-slate-100 pt-3 text-sm text-slate-500 dark:border-slate-800">
         <button
           onClick={toggleLike}
@@ -75,12 +157,26 @@ export default function PostCard({ post, onUpdate }) {
           Ulashish
         </button>
       </div>
+
       {showComments && (
         <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
           {post.comments.map((c) => (
-            <div key={c.id} className="rounded-xl bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800">
-              <span className="font-semibold">{c.author}: </span>
-              {c.text}
+            <div key={c.id} className="group flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800">
+              <div className="min-w-0 flex-1">
+                <span className="font-semibold">{c.author}: </span>
+                {c.text}
+              </div>
+              {(isStaff || c.authorId === currentUser?.id) && (
+                <button
+                  onClick={() => removeComment(c.id)}
+                  aria-label="Izohni o'chirish"
+                  className="shrink-0 text-slate-400 opacity-0 transition-opacity hover:text-rose-600 group-hover:opacity-100"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
           ))}
           <form onSubmit={addComment} className="flex gap-2">
@@ -92,7 +188,8 @@ export default function PostCard({ post, onUpdate }) {
             />
             <button
               type="submit"
-              className="shrink-0 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+              disabled={busy}
+              className="shrink-0 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
             >
               Yuborish
             </button>

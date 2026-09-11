@@ -4,6 +4,7 @@ const { requireRole } = require("../middleware/auth");
 const { upload } = require("../middleware/upload");
 const { createUploadedFileRecord } = require("../lib/uploadedFile");
 const { sanitizeHtml } = require("../lib/sanitizeHtml");
+const { HttpError, route } = require("../lib/httpError");
 
 const router = express.Router();
 
@@ -18,16 +19,16 @@ const GRADIENTS = [
   "from-indigo-600 to-violet-700",
 ];
 
-router.get("/", async (req, res) => {
+router.get("/", route(async (req, res) => {
   const banners = await prisma.banner.findMany({ orderBy: { order: "asc" } });
   res.json({ banners });
-});
+}));
 
 // upload.single("image") faqat multipart/form-data so'rovlarda ishlaydi —
 // oddiy JSON so'rov kelsa (rasmsiz tahrirlash), shunchaki o'tkazib yuboradi.
-router.post("/", requireRole("ADMIN", "TEACHER"), upload.single("image"), async (req, res) => {
+router.post("/", requireRole("ADMIN", "TEACHER"), upload.single("image"), route(async (req, res) => {
   const { title, text, color } = req.body;
-  if (!title || !text) return res.status(400).json({ error: "Sarlavha va matn talab qilinadi" });
+  if (!title || !text) throw new HttpError(400, "Sarlavha va matn talab qilinadi");
 
   let imageId;
   if (req.file) {
@@ -46,9 +47,9 @@ router.post("/", requireRole("ADMIN", "TEACHER"), upload.single("image"), async 
     },
   });
   res.status(201).json({ banner });
-});
+}));
 
-router.patch("/:id", requireRole("ADMIN", "TEACHER"), upload.single("image"), async (req, res) => {
+router.patch("/:id", requireRole("ADMIN", "TEACHER"), upload.single("image"), route(async (req, res) => {
   const { title, text, color } = req.body;
   const data = {};
   if (title !== undefined) data.title = title;
@@ -60,20 +61,20 @@ router.patch("/:id", requireRole("ADMIN", "TEACHER"), upload.single("image"), as
   }
   const banner = await prisma.banner.update({ where: { id: req.params.id }, data });
   res.json({ banner });
-});
+}));
 
-router.delete("/:id", requireRole("ADMIN", "TEACHER"), async (req, res) => {
+router.delete("/:id", requireRole("ADMIN", "TEACHER"), route(async (req, res) => {
   await prisma.banner.delete({ where: { id: req.params.id } });
   res.json({ ok: true });
-});
+}));
 
-router.patch("/:id/move", requireRole("ADMIN", "TEACHER"), async (req, res) => {
+router.patch("/:id/move", requireRole("ADMIN", "TEACHER"), route(async (req, res) => {
   const { direction } = req.body; // -1 yoki 1
   const banners = await prisma.banner.findMany({ orderBy: { order: "asc" } });
   const idx = banners.findIndex((b) => b.id === req.params.id);
   const swapIdx = idx + direction;
   if (idx === -1 || swapIdx < 0 || swapIdx >= banners.length) {
-    return res.status(400).json({ error: "Ko'chirib bo'lmaydi" });
+    throw new HttpError(400, "Ko'chirib bo'lmaydi");
   }
   await prisma.$transaction([
     prisma.banner.update({ where: { id: banners[idx].id }, data: { order: banners[swapIdx].order } }),
@@ -81,6 +82,6 @@ router.patch("/:id/move", requireRole("ADMIN", "TEACHER"), async (req, res) => {
   ]);
   const updated = await prisma.banner.findMany({ orderBy: { order: "asc" } });
   res.json({ banners: updated });
-});
+}));
 
 module.exports = router;
