@@ -24,6 +24,9 @@ export default function TeacherAssignmentsPage() {
   const [maxScore, setMaxScore] = useState(100);
   const [dueDate, setDueDate] = useState("");
   const [testFile, setTestFile] = useState(null);
+  // Bo'sh qoldirilsa — cheklovsiz (vaqt erkin, urinishlar cheksiz).
+  const [timeLimitMin, setTimeLimitMin] = useState("");
+  const [maxAttempts, setMaxAttempts] = useState("");
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -56,6 +59,8 @@ export default function TeacherAssignmentsPage() {
     setMaxScore(100);
     setDueDate("");
     setTestFile(null);
+    setTimeLimitMin("");
+    setMaxAttempts("");
     setFormError("");
     setOpen(true);
   }
@@ -67,6 +72,8 @@ export default function TeacherAssignmentsPage() {
     setMaxScore(a.maxScore);
     setDueDate(a.dueDate?.slice(0, 16) || "");
     setTestFile(null);
+    setTimeLimitMin(a.timeLimitSec ? Math.round(a.timeLimitSec / 60) : "");
+    setMaxAttempts(a.maxAttempts || "");
     setFormError("");
     setOpen(true);
   }
@@ -79,7 +86,16 @@ export default function TeacherAssignmentsPage() {
     setSaving(true);
     setFormError("");
     try {
-      const payload = { title, description, type: assignmentType, maxScore, dueDate };
+      const payload = {
+        title,
+        description,
+        type: assignmentType,
+        maxScore,
+        dueDate,
+        // Bo'sh maydon null bo'lib ketadi — server buni "cheklovsiz" deb tushunadi.
+        timeLimitSec: assignmentType === "TEST" && timeLimitMin ? Number(timeLimitMin) * 60 : null,
+        maxAttempts: assignmentType === "TEST" && maxAttempts ? Number(maxAttempts) : null,
+      };
       let assignmentId = editing?.id;
       if (editing) await assignmentsApi.update(editing.id, payload);
       else assignmentId = (await assignmentsApi.create({ ...payload, steps: [] })).assignment.id;
@@ -148,8 +164,10 @@ export default function TeacherAssignmentsPage() {
               <Link href={`/teacher/assignments/${a.id}`} className="min-w-0 flex-1">
                 <p className="font-medium">{a.title}</p>
                 <p className="text-xs text-slate-500">
-                  {a.type === "TEST" ? `Test · ${a.questions?.length || 0} savol` : "Fayl"} · Max: {a.maxScore} · {a.submissions.length}{" "}
-                  javob{notReviewed > 0 && ` · ${notReviewed} tekshirilmagan`}
+                  {a.type === "TEST" ? `Test · ${a.questions?.length || 0} savol` : "Fayl"}
+                  {a.type === "TEST" && a.timeLimitSec ? ` · ${Math.round(a.timeLimitSec / 60)} daq` : ""}
+                  {a.type === "TEST" && a.maxAttempts ? ` · ${a.maxAttempts} urinish` : ""} · Max: {a.maxScore} ·{" "}
+                  {a.submissions.length} javob{notReviewed > 0 && ` · ${notReviewed} tekshirilmagan`}
                 </p>
               </Link>
               <span className={`badge shrink-0 ${closed ? "bg-slate-100 text-slate-500 dark:bg-slate-800" : "bg-brand-100 text-brand-700 dark:bg-brand-900 dark:text-brand-300"}`}>
@@ -193,8 +211,43 @@ export default function TeacherAssignmentsPage() {
               <input type="file" accept=".docx,.pdf,.txt" onChange={(e) => setTestFile(e.target.files?.[0] || null)} className="input" />
               <p className="mt-1 text-xs text-slate-500">
                 Faylda bir nechta savol bo'lishi mumkin — talaba ularning barchasiga javob beradi, umumiy natijaga qarab ball avtomatik
-                hisoblanadi.
+                hisoblanadi. Bitta savolda bir nechta <code>~</code> belgilansa, u ko'p javobli savolga aylanadi (talabada checkbox
+                chiziladi va faqat barcha to'g'ri javoblar tanlangandagina hisobga olinadi).
                 {editing && ` Fayl tanlanmasa, mavjud ${editing.questions?.length || 0} savol saqlanadi.`}
+              </p>
+            </div>
+          )}
+
+          {assignmentType === "TEST" && (
+            <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+              <p className="mb-3 text-sm font-semibold">Test sozlamalari</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="label">Vaqt (daqiqa)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={timeLimitMin}
+                    onChange={(e) => setTimeLimitMin(e.target.value)}
+                    className="input"
+                    placeholder="cheklanmagan"
+                  />
+                </div>
+                <div>
+                  <label className="label">Urinishlar soni</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={maxAttempts}
+                    onChange={(e) => setMaxAttempts(e.target.value)}
+                    className="input"
+                    placeholder="cheksiz"
+                  />
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Maydonlar bo&apos;sh qoldirilsa cheklov qo&apos;yilmaydi: talaba testni erkin, xohlagancha vaqt sarflab
+                va cheksiz marta ishlay oladi. Vaqt belgilansa, u tugaganda javoblar avtomatik yuboriladi.
               </p>
             </div>
           )}

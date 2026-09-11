@@ -552,7 +552,9 @@ function PollsTab() {
   const [multiple, setMultiple] = useState(false);
   const [isQuiz, setIsQuiz] = useState(false);
   const [options, setOptions] = useState(["", ""]);
-  const [correctIdx, setCorrectIdx] = useState(0);
+  // "Bir nechta javob" yoqilganda to'g'ri javob ham bittadan ko'p bo'lishi
+  // mumkin — shuning uchun bitta indeks emas, indekslar ro'yxati.
+  const [correctIdxs, setCorrectIdxs] = useState([0]);
   const [saving, setSaving] = useState(false);
 
   function reload() {
@@ -568,7 +570,15 @@ function PollsTab() {
   }
   function removeOption(i) {
     setOptions((o) => (o.length <= 2 ? o : o.filter((_, idx) => idx !== i)));
-    setCorrectIdx((idx) => (idx >= i && idx > 0 ? idx - 1 : idx));
+    // O'chirilgan variantdan keyingi indekslar bittaga suriladi.
+    setCorrectIdxs((prev) => prev.filter((idx) => idx !== i).map((idx) => (idx > i ? idx - 1 : idx)));
+  }
+
+  function toggleCorrect(i) {
+    setCorrectIdxs((prev) => {
+      if (!multiple) return [i];
+      return prev.includes(i) ? prev.filter((idx) => idx !== i) : [...prev, i];
+    });
   }
   function updateOption(i, val) {
     setOptions((o) => o.map((x, idx) => (idx === i ? val : x)));
@@ -576,9 +586,19 @@ function PollsTab() {
 
   async function save(e) {
     e.preventDefault();
-    const cleanOptions = options.filter((o) => o.trim());
+    // To'g'ri javob belgisi variantning ASL indeksiga bog'langan, shuning
+    // uchun bo'sh variantlarni filtrlashdan oldin biriktiramiz — aks holda
+    // ro'yxat siljib, belgi boshqa variantga tushib qolardi.
+    const cleanOptions = options
+      .map((text, i) => ({ text: text.trim(), correct: isQuiz && correctIdxs.includes(i) }))
+      .filter((o) => o.text);
+
     if (cleanOptions.length < 2) {
       toastError("Kamida 2 ta variant kerak");
+      return;
+    }
+    if (isQuiz && !cleanOptions.some((o) => o.correct)) {
+      toastError("Viktorinada kamida bitta to'g'ri javob belgilanishi kerak");
       return;
     }
     setSaving(true);
@@ -588,13 +608,13 @@ function PollsTab() {
         multiple,
         // To'g'ri javob faqat "viktorina" rejimida belgilanadi — oddiy
         // so'rovnomada to'g'ri javob tushunchasi yo'q.
-        options: cleanOptions.map((text, i) => ({ text, correct: isQuiz && i === correctIdx })),
+        options: cleanOptions,
       });
       await reload();
       setOpen(false);
       setQuestion("");
       setOptions(["", ""]);
-      setCorrectIdx(0);
+      setCorrectIdxs([0]);
       setIsQuiz(false);
       setMultiple(false);
       success("So'rovnoma yaratildi");
@@ -664,7 +684,16 @@ function PollsTab() {
           </div>
           <div className="flex flex-wrap gap-4">
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={multiple} onChange={(e) => setMultiple(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={multiple}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setMultiple(next);
+                  // Ko'p javobdan bittaga qaytilsa — birinchisini qoldiramiz.
+                  if (!next) setCorrectIdxs((prev) => prev.slice(0, 1));
+                }}
+              />
               Bir nechta javob tanlash mumkin
             </label>
             <label className="flex items-center gap-2 text-sm">
@@ -673,16 +702,24 @@ function PollsTab() {
             </label>
           </div>
           <div className="space-y-2">
-            <label className="label">Variantlar</label>
+            <label className="label">
+              Variantlar
+              {isQuiz && (
+                <span className="ml-1 font-normal text-slate-500">
+                  — {multiple ? "to'g'ri javoblarni belgilang" : "to'g'ri javobni belgilang"}
+                </span>
+              )}
+            </label>
             {options.map((o, i) => (
               <div key={i} className="flex items-center gap-2">
                 {isQuiz && (
                   <input
-                    type="radio"
-                    name="correct"
-                    checked={correctIdx === i}
-                    onChange={() => setCorrectIdx(i)}
+                    type={multiple ? "checkbox" : "radio"}
+                    name={multiple ? undefined : "correct"}
+                    checked={correctIdxs.includes(i)}
+                    onChange={() => toggleCorrect(i)}
                     title="To'g'ri javob"
+                    aria-label={`${i + 1}-variant to'g'ri javob`}
                   />
                 )}
                 <input value={o} onChange={(e) => updateOption(i, e.target.value)} className="input" placeholder={`Variant ${i + 1}`} required />

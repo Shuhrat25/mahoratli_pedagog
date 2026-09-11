@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { assignmentsApi, fileUrl } from "@/lib/api";
 import RichText from "@/components/RichText";
+import { useToast } from "@/components/ToastProvider";
 import { Icon, paths } from "@/components/icons";
 
 export default function StudentAssignmentDetailPage() {
@@ -13,21 +14,79 @@ export default function StudentAssignmentDetailPage() {
   const [assignment, setAssignment] = useState(null);
   const [answers, setAnswers] = useState({});
   const [testResult, setTestResult] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [remaining, setRemaining] = useState(null);
+  const submitRef = useRef(null);
+  const { error: toastError, success } = useToast();
 
   useEffect(() => {
     assignmentsApi.get(id).then(({ assignment }) => setAssignment(assignment));
   }, [id]);
 
+  // Vaqt chegarasi belgilangan bo'lsa — hisob ketadi va tugaganda javoblar
+  // avtomatik yuboriladi. Chegara yo'q bo'lsa taymer umuman ko'rinmaydi.
+  useEffect(() => {
+    if (!assignment || assignment.type !== "TEST" || !assignment.timeLimitSec || testResult) return;
+    setRemaining((prev) => (prev === null ? assignment.timeLimitSec : prev));
+    const timer = setInterval(() => {
+      setRemaining((prev) => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          clearInterval(timer);
+          submitRef.current?.();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [assignment?.id, assignment?.type, assignment?.timeLimitSec, testResult]);
+
   if (!assignment) return <div className="text-slate-400">Yuklanmoqda...</div>;
 
   const closed = new Date(assignment.dueDate) < new Date();
   const mySubmission = assignment.submissions[0];
+  const usedAttempts = mySubmission?.attempts || 0;
+  const attemptsLeft = assignment.maxAttempts ? Math.max(0, assignment.maxAttempts - usedAttempts) : null;
+
+  function formatClock(seconds) {
+    const m = Math.floor(Math.max(0, seconds) / 60);
+    const sec = Math.max(0, seconds) % 60;
+    return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  }
+
+  function toggleAnswer(question, optionId) {
+    setAnswers((prev) => {
+      if (!question.multiple) return { ...prev, [question.id]: optionId };
+      const current = Array.isArray(prev[question.id]) ? prev[question.id] : [];
+      const next = current.includes(optionId) ? current.filter((x) => x !== optionId) : [...current, optionId];
+      return { ...prev, [question.id]: next };
+    });
+  }
+
+  function isChosen(question, optionId) {
+    const value = answers[question.id];
+    return Array.isArray(value) ? value.includes(optionId) : value === optionId;
+  }
 
   async function submitTest(e) {
-    e.preventDefault();
-    const result = await assignmentsApi.submitTest(id, answers);
-    setTestResult(result);
+    e?.preventDefault?.();
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const result = await assignmentsApi.submitTest(id, answers);
+      setTestResult(result);
+      setRemaining(null);
+      const { assignment: fresh } = await assignmentsApi.get(id);
+      setAssignment(fresh);
+      success(`Test topshirildi — ${result.score}/${result.maxScore} ball`);
+    } catch (err) {
+      toastError(err.message || "Testni yuborib bo'lmadi");
+    } finally {
+      setSubmitting(false);
+    }
   }
+  submitRef.current = submitTest;
 
   return (
     <div>
@@ -80,6 +139,31 @@ export default function StudentAssignmentDetailPage() {
 
       {assignment.type === "TEST" ? (
         <form onSubmit={submitTest} className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600 dark:text-slate-400">
+              <span>{assignment.questions.length} savol</span>
+              <span>
+                Vaqt:{" "}
+                <b>{assignment.timeLimitSec ? `${Math.round(assignment.timeLimitSec / 60)} daqiqa` : "cheklanmagan"}</b>
+              </span>
+              <span>
+                Urinishlar:{" "}
+                <b>{assignment.maxAttempts ? `${usedAttempts} / ${assignment.maxAttempts}` : "cheksiz"}</b>
+              </span>
+            </div>
+            {remaining !== null && !testResult && (
+              <span
+                className={`rounded-full px-3 py-1 font-bold tabular-nums ${
+                  remaining <= 60
+                    ? "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
+                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                }`}
+              >
+                ⏱ {formatClock(remaining)}
+              </span>
+            )}
+          </div>
+
           {assignment.questions.map((q, qi) => {
             const result = testResult?.results.find((r) => r.questionId === q.id);
             return (
@@ -87,10 +171,14 @@ export default function StudentAssignmentDetailPage() {
                 <p className="mb-3 font-semibold">
                   {qi + 1}. {q.text}
                 </p>
+                {q.multiple && (
+                  <p className="mb-2 text-xs font-medium text-indigo-500">Bir nechta to&apos;g&apos;ri javob bor</p>
+                )}
                 <div className="space-y-2">
                   {q.options.map((opt) => {
-                    const isCorrect = result && opt.id === result.correctOptionId;
-                    const isWrongPick = result && answers[q.id] === opt.id && opt.id !== result.correctOptionId;
+                    const isCorrect = result?.correctOptionIds?.includes(opt.id);
+                    const chosen = isChosen(q, opt.id);
+                    const isWrongPick = result && chosen && !isCorrect;
                     return (
                       <label
                         key={opt.id}
@@ -103,11 +191,11 @@ export default function StudentAssignmentDetailPage() {
                         }`}
                       >
                         <input
-                          type="radio"
+                          type={q.multiple ? "checkbox" : "radio"}
                           name={q.id}
                           disabled={!!testResult || closed}
-                          checked={answers[q.id] === opt.id}
-                          onChange={() => setAnswers((a) => ({ ...a, [q.id]: opt.id }))}
+                          checked={chosen}
+                          onChange={() => toggleAnswer(q, opt.id)}
                           className="accent-indigo-600"
                         />
                         {opt.text}
@@ -135,8 +223,18 @@ export default function StudentAssignmentDetailPage() {
           )}
 
           {!closed && !testResult && (
-            <button type="submit" className="rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">
-              {mySubmission ? "Qayta topshirish" : "Testni yakunlash"}
+            <button
+              type="submit"
+              disabled={submitting || attemptsLeft === 0}
+              className="rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {attemptsLeft === 0
+                ? "Urinishlar tugadi"
+                : submitting
+                ? "Yuborilmoqda..."
+                : mySubmission
+                ? "Qayta topshirish"
+                : "Testni yakunlash"}
             </button>
           )}
         </form>

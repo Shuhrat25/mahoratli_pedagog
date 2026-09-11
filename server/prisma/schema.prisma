@@ -216,6 +216,10 @@ model Assignment {
   maxScore    Int
   dueDate     DateTime
   createdAt   DateTime             @default(now())
+  // TEST turidagi vazifa sozlamalari. Ikkalasi ham null bo'lsa — vaqt
+  // cheklanmagan va urinishlar soni cheksiz.
+  timeLimitSec Int?
+  maxAttempts  Int?
   steps       AssignmentStep[]
   materials   AssignmentMaterial[]
   questions   AssignmentQuestion[]
@@ -269,6 +273,8 @@ model Submission {
   submittedAt  DateTime      @default(now())
   // Talabaning ishga qo'shimcha izohi (ixtiyoriy).
   text         String?
+  // TEST turidagi vazifada nechanchi urinish ekani.
+  attempts     Int           @default(0)
   score        Int?
   comment      String?
   status       String        @default("NOT_REVIEWED")

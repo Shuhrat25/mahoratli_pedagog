@@ -47,6 +47,8 @@ function shapeAssignment(a, user) {
     type: a.type,
     maxScore: a.maxScore,
     dueDate: a.dueDate,
+    timeLimitSec: a.timeLimitSec,
+    maxAttempts: a.maxAttempts,
     steps: a.steps,
     materials: a.materials.map((m) => ({ id: m.id, name: m.file.originalName, fileId: m.file.id })),
     // Talabaga to'g'ri javob ko'rsatilmaydi — darslardagi TEST bilan bir xil
@@ -66,6 +68,7 @@ function shapeAssignment(a, user) {
           fileId: s.file?.id,
           files: shapeSubmissionFiles(s),
           text: s.text,
+          attempts: s.attempts,
           submittedAt: s.submittedAt,
           score: s.score,
           comment: s.comment,
@@ -79,6 +82,7 @@ function shapeAssignment(a, user) {
             fileName: mySubmission.file?.originalName,
             files: shapeSubmissionFiles(mySubmission),
             text: mySubmission.text,
+            attempts: mySubmission.attempts,
             submittedAt: mySubmission.submittedAt,
             score: mySubmission.score,
             comment: mySubmission.comment,
@@ -92,6 +96,20 @@ function shapeAssignment(a, user) {
 function toChosenIds(answer) {
   if (Array.isArray(answer)) return answer.filter(Boolean);
   return answer ? [answer] : [];
+}
+
+/** Vazifa tanasidan TEST sozlamalarini ajratib oladi (bo'sh — cheklovsiz). */
+function testSettingsFromBody(body) {
+  const data = {};
+  if (body.timeLimitSec !== undefined) {
+    const value = Number(body.timeLimitSec);
+    data.timeLimitSec = value > 0 ? Math.round(value) : null;
+  }
+  if (body.maxAttempts !== undefined) {
+    const value = Number(body.maxAttempts);
+    data.maxAttempts = value > 0 ? Math.round(value) : null;
+  }
+  return data;
 }
 
 /** Bir nechta to'g'ri javobli savol: tanlangan to'plam to'g'ri to'plamga teng bo'lishi kerak. */
@@ -187,6 +205,7 @@ router.post(
         type: assignmentType,
         maxScore: Number(maxScore),
         dueDate: new Date(dueDate),
+        ...testSettingsFromBody(req.body),
         steps:
           assignmentType === "FILE" && Array.isArray(steps)
             ? { create: steps.map((s, i) => ({ title: s.title, text: sanitizeHtml(s.text), order: i })) }
@@ -211,7 +230,7 @@ router.patch(
   requireRole("ADMIN", "TEACHER"),
   route(async (req, res) => {
     const { title, description, maxScore, dueDate } = req.body;
-    const data = {};
+    const data = { ...testSettingsFromBody(req.body) };
     if (title !== undefined) data.title = title;
     if (description !== undefined) data.description = isEmptyHtml(description) ? "" : sanitizeHtml(description);
     if (maxScore !== undefined) data.maxScore = Number(maxScore);
@@ -297,6 +316,17 @@ router.post(
     if (assignment.type !== "TEST") throw new HttpError(400, "Bu vazifa TEST turida emas");
     if (new Date(assignment.dueDate) < new Date()) throw new HttpError(403, "Vazifa muddati yopilgan");
 
+    const existing = await prisma.submission.findUnique({
+      where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
+    });
+    const usedAttempts = existing?.attempts || 0;
+    if (assignment.maxAttempts && usedAttempts >= assignment.maxAttempts) {
+      throw new HttpError(
+        403,
+        `Urinishlar tugadi (${assignment.maxAttempts} tadan ${usedAttempts} ta ishlatilgan)`
+      );
+    }
+
     let correctCount = 0;
     const results = assignment.questions.map((q) => {
       const { correctIds, chosenIds, isCorrect } = gradeQuestion(q, answers?.[q.id]);
@@ -306,13 +336,12 @@ router.post(
     const total = assignment.questions.length;
     const score = total ? Math.round((correctCount / total) * assignment.maxScore) : 0;
 
-    const previous = await prisma.submission.findUnique({
-      where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
-    });
+    const previous = existing;
+    const attempts = usedAttempts + 1;
     await prisma.submission.upsert({
       where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
-      update: { fileId: null, submittedAt: new Date(), score, comment: null, status: "REVIEWED" },
-      create: { assignmentId: req.params.id, studentId: req.user.id, score, status: "REVIEWED" },
+      update: { fileId: null, submittedAt: new Date(), score, comment: null, status: "REVIEWED", attempts },
+      create: { assignmentId: req.params.id, studentId: req.user.id, score, status: "REVIEWED", attempts },
     });
 
     // Qayta topshirilganda ball farqi qo'shiladi (birinchi marta esa to'liq ball).
@@ -321,7 +350,15 @@ router.post(
       await prisma.user.update({ where: { id: req.user.id }, data: { points: { increment: pointsDelta } } });
     }
 
-    res.json({ correctCount, total, score, maxScore: assignment.maxScore, results });
+    res.json({
+      correctCount,
+      total,
+      score,
+      maxScore: assignment.maxScore,
+      attempts,
+      maxAttempts: assignment.maxAttempts,
+      results,
+    });
   })
 );
 

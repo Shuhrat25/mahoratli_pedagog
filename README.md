@@ -24,8 +24,11 @@ The app's interface is in Uzbek (Latin script), built around a national-values c
 - Live lessons: an external meeting link (Zoom / Meet) with a start time; the join button
   opens 15 minutes beforehand and every student gets a notification when one is scheduled
 - Downloadable per-lesson attachments (slides, PDFs, worksheets)
-- Optional test timer, shuffled questions, attempt limits, and multiple-correct-answer
-  questions (a question with several `~` lines becomes a checkbox question)
+- Optional test timer, shuffled questions and attempt limits — on **lessons and
+  assignments alike**. Leaving a field empty means no limit: unlimited time, unlimited
+  attempts. When a timer is set it counts down on screen and submits automatically at zero
+- Multiple-correct-answer questions: a question with several `~` lines becomes a checkbox
+  question, and it only counts as correct when every right answer is ticked and no wrong one is
 - Certificate page once every lesson is complete (print / save as PDF)
 - Auto-graded tests, including bulk import from a DOCX/PDF/TXT file using a simple markup
   format (`~` correct answer, `==` incorrect answer, `++++` question separator)
@@ -47,7 +50,9 @@ The app's interface is in Uzbek (Latin script), built around a national-values c
   tags, pinning to the top of the feed, a cover image, reading time, and a public
   permalink at `/post/<id>` that is server-rendered with Open Graph tags so the link
   previews correctly when shared
-- Polls can be turned into quizzes — the correct answer is revealed after voting
+- Polls can be turned into quizzes — correct answers are revealed after voting. With
+  "several answers allowed" on, several options can be marked correct (the picker switches
+  from radio buttons to checkboxes)
 - Lessons/topics management with drag-style reordering and the DOCX/PDF test importer
 - **Rich text everywhere the teacher writes** — a dependency-free WYSIWYG editor
   (headings, lists, quotes, code blocks, colours/highlight, alignment, links, inline
