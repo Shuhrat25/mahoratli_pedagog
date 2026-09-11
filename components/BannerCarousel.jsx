@@ -24,11 +24,14 @@ export default function BannerCarousel({ banners }) {
   }
 
   return (
+    // Balandlik QAT'IY belgilangan (minHeight emas): ilgari u mazmunga qarab
+    // o'zgarardi va slaydlar almashganda banner "sakrab" turardi, sahifadagi
+    // qolgan bloklar ham siljib ketardi.
     <div
-      className={`group relative overflow-hidden rounded-3xl bg-cover bg-center p-7 text-white shadow-lg shadow-indigo-900/10 sm:p-10 ${
+      className={`group relative h-[220px] overflow-hidden rounded-3xl bg-cover bg-center text-white shadow-lg shadow-indigo-900/10 sm:h-[260px] ${
         hasImage ? "" : `bg-gradient-to-br ${banner.color}`
       }`}
-      style={{ minHeight: "180px", backgroundImage: hasImage ? `url(${fileUrl(banner.imageId)})` : undefined }}
+      style={{ backgroundImage: hasImage ? `url(${fileUrl(banner.imageId)})` : undefined }}
     >
       {hasImage ? (
         // Rasm ustidagi matn har doim o'qilishi uchun qorong'i pardalar
@@ -40,9 +43,19 @@ export default function BannerCarousel({ banners }) {
         </>
       )}
 
-      <div className="relative max-w-xl">
-        <h2 className="text-xl font-extrabold leading-tight drop-shadow-sm sm:text-3xl">{banner.title}</h2>
-        <RichText value={banner.text} inline className="mt-3 text-sm text-white/90 drop-shadow-sm sm:text-base" />
+      {/* Matn markazda, nuqtalar uchun pastda joy qoldiriladi */}
+      <div className="relative flex h-full flex-col justify-center p-7 pb-12 sm:p-10 sm:pb-14">
+        <div className="max-w-xl">
+          <h2 className="line-clamp-2 text-xl font-extrabold leading-tight drop-shadow-sm sm:text-3xl">
+            {banner.title}
+          </h2>
+          {/* Uzun matn bannerni cho'zib yubormasligi uchun 3 qatorga qisqartiriladi */}
+          <RichText
+            value={banner.text}
+            inline
+            className="mt-3 line-clamp-3 text-sm text-white/90 drop-shadow-sm sm:text-base"
+          />
+        </div>
       </div>
 
       {banners.length > 1 && (
@@ -65,7 +78,7 @@ export default function BannerCarousel({ banners }) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 18l6-6-6-6" />
             </svg>
           </button>
-          <div className="relative mt-6 flex gap-1.5">
+          <div className="absolute bottom-6 left-7 flex gap-1.5 sm:left-10">
             {banners.map((b, i) => (
               <button
                 key={b.id}

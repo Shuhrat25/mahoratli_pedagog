@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { assignmentsApi, fileUrl } from "@/lib/api";
 import RichText from "@/components/RichText";
@@ -10,7 +11,6 @@ export default function StudentAssignmentDetailPage() {
   const { id } = useParams();
   const router = useRouter();
   const [assignment, setAssignment] = useState(null);
-  const [uploading, setUploading] = useState(false);
   const [answers, setAnswers] = useState({});
   const [testResult, setTestResult] = useState(null);
 
@@ -22,21 +22,6 @@ export default function StudentAssignmentDetailPage() {
 
   const closed = new Date(assignment.dueDate) < new Date();
   const mySubmission = assignment.submissions[0];
-
-  async function handleUpload(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      await assignmentsApi.submit(id, formData);
-      const { assignment: updated } = await assignmentsApi.get(id);
-      setAssignment(updated);
-    } finally {
-      setUploading(false);
-    }
-  }
 
   async function submitTest(e) {
     e.preventDefault();
@@ -158,32 +143,66 @@ export default function StudentAssignmentDetailPage() {
       ) : (
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h3 className="mb-2 font-bold">Bajarilgan ishni yuborish</h3>
+
           {mySubmission && (
-            <div className="mb-3 text-sm">
-              <p>
-                Yuborilgan fayl: <span className="font-medium">{mySubmission.fileName}</span> ·{" "}
+            <div className="mb-4 text-sm">
+              <p className="mb-2">
+                Holat:{" "}
                 {mySubmission.status === "REVIEWED" ? (
-                  <span className="text-emerald-600 dark:text-emerald-400">
-                    Baholandi: {mySubmission.score}/{assignment.maxScore}
+                  <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                    Baholandi — {mySubmission.score}/{assignment.maxScore}
                   </span>
                 ) : (
-                  <span className="text-amber-600">Tekshirilmoqda</span>
+                  <span className="font-medium text-amber-600">Tekshirilmoqda</span>
                 )}
               </p>
+
+              {mySubmission.files?.length > 0 && (
+                <>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Yuborilgan fayllar ({mySubmission.files.length})
+                  </p>
+                  <ul className="space-y-1">
+                    {mySubmission.files.map((f) => (
+                      <li key={f.id}>
+                        <a
+                          href={fileUrl(f.fileId)}
+                          className="flex items-center gap-2 font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                        >
+                          <Icon path={paths.download} className="h-4 w-4" /> {f.name}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+
+              {mySubmission.text && (
+                <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Izohingiz</p>
+                  <p className="whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">{mySubmission.text}</p>
+                </div>
+              )}
+
               {mySubmission.status === "REVIEWED" && mySubmission.comment && (
-                <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/60">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">O&apos;qituvchi izohi</p>
+                <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                    O&apos;qituvchi izohi
+                  </p>
                   <RichText value={mySubmission.comment} className="text-sm text-slate-700 dark:text-slate-300" />
                 </div>
               )}
             </div>
           )}
+
           {!closed && (
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+            <Link
+              href={`/student/assignments/${id}/submit`}
+              className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+            >
               <Icon path={paths.upload} className="h-4 w-4" />
-              {uploading ? "Yuklanmoqda..." : mySubmission ? "Qayta yuklash" : "Fayl yuklash"}
-              <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
-            </label>
+              {mySubmission ? "Qayta yuklash" : "Yuklash"}
+            </Link>
           )}
         </div>
       )}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isEmptyHtml, sanitizeHtml, toEditorHtml } from "@/lib/richText";
+import { filesApi, fileUrl } from "@/lib/api";
 
 /**
  * Tashqi kutubxonasiz (zero-dependency) rich-text tahrirlagich —
@@ -111,6 +112,14 @@ const G = {
     </>
   ),
   rule: <path d="M4 12h16M7 7h10M7 17h10" />,
+  image: (
+    <>
+      <path d="M3 5h18v14H3z" />
+      <path d="M3 16l5-5 4 4 3-3 6 6" />
+      <circle cx="8.5" cy="9" r="1.2" />
+    </>
+  ),
+  spinner: <path d="M12 3a9 9 0 019 9" />,
   expand: <path d="M4 9V4h5M20 15v5h-5M15 4h5v5M9 20H4v-5" />,
   collapse: <path d="M9 4v5H4M15 20v-5h5M20 9h-5V4M4 15h5v5" />,
 };
@@ -123,6 +132,7 @@ export default function RichTextEditor({
   disabled = false,
   minHeight,
   ariaLabel,
+  allowImages = true,
 }) {
   const editorRef = useRef(null);
   const lastValueRef = useRef(null);
@@ -136,6 +146,9 @@ export default function RichTextEditor({
   const [linkValue, setLinkValue] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
   const [counts, setCounts] = useState({ words: 0, chars: 0 });
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileInputRef = useRef(null);
 
   const height = minHeight ?? (compact ? 110 : 200);
 
@@ -275,6 +288,14 @@ export default function RichTextEditor({
   );
 
   function handlePaste(e) {
+    // Skrinshot yoki rasm nusxalangan bo'lsa — uni yuklab, matnga qo'yamiz.
+    const imageFile = Array.from(e.clipboardData?.files || []).find((f) => /^image\//.test(f.type));
+    if (allowImages && imageFile) {
+      e.preventDefault();
+      saveRange();
+      uploadAndInsert(imageFile);
+      return;
+    }
     e.preventDefault();
     const html = e.clipboardData?.getData("text/html");
     const text = e.clipboardData?.getData("text/plain") || "";
@@ -287,6 +308,21 @@ export default function RichTextEditor({
           .join("");
     document.execCommand("insertHTML", false, payload);
     emit();
+  }
+
+  function handleDrop(e) {
+    const imageFile = Array.from(e.dataTransfer?.files || []).find((f) => /^image\//.test(f.type));
+    if (!allowImages || !imageFile) return;
+    e.preventDefault();
+    // Tashlangan nuqtaga kursorni qo'yamiz, shunda rasm o'sha yerga tushadi.
+    const range = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+    if (range && editorRef.current?.contains(range.startContainer)) {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      saveRange();
+    }
+    uploadAndInsert(imageFile);
   }
 
   function handleKeyDown(e) {
@@ -322,6 +358,42 @@ export default function RichTextEditor({
     } else {
       exec("createLink", safe);
     }
+  }
+
+  /** Tayyor URL bilan rasmni kursor turgan joyga qo'yadi. */
+  function insertImageUrl(url, alt = "") {
+    const el = editorRef.current;
+    if (!el) return;
+    el.focus();
+    restoreRange();
+    const safeAlt = alt.replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    document.execCommand("insertHTML", false, `<img src="${url}" alt="${safeAlt}"><p><br></p>`);
+    emit();
+  }
+
+  /** Faylni serverga yuklab, natijasini matnga qo'yadi. */
+  const uploadAndInsert = useCallback(
+    async (file) => {
+      if (!file || !/^image\//.test(file.type)) return;
+      setUploading(true);
+      try {
+        const { file: saved } = await filesApi.uploadInline(file);
+        insertImageUrl(fileUrl(saved.id), saved.name);
+      } catch (err) {
+        // Tahrirlagich toast tizimiga bog'liq bo'lmasligi uchun xabar shu yerda.
+        setUploadError(err?.message || "Rasmni yuklab bo'lmadi");
+        setTimeout(() => setUploadError(""), 5000);
+      } finally {
+        setUploading(false);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  function pickImage() {
+    saveRange();
+    fileInputRef.current?.click();
   }
 
   const btnClass = (isActive) =>
@@ -495,6 +567,14 @@ export default function RichTextEditor({
           )}
         </div>
         <ToolButton icon={G.unlink} title="Havolani olib tashlash" onClick={() => exec("unlink")} />
+        {allowImages && (
+          <ToolButton
+            icon={G.image}
+            title={uploading ? "Yuklanmoqda..." : "Rasm qo'shish"}
+            isActive={uploading}
+            onClick={pickImage}
+          />
+        )}
         <ToolButton
           icon={G.clear}
           title="Formatlashni tozalash"
@@ -525,6 +605,8 @@ export default function RichTextEditor({
         onInput={emit}
         onBlur={emit}
         onPaste={handlePaste}
+        onDrop={handleDrop}
+        onDragOver={(e) => allowImages && e.preventDefault()}
         onKeyDown={handleKeyDown}
         onKeyUp={refreshState}
         onMouseUp={refreshState}
@@ -535,9 +617,31 @@ export default function RichTextEditor({
         } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
       />
 
+      {allowImages && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            uploadAndInsert(file);
+          }}
+        />
+      )}
+
+      {uploadError && (
+        <p className="border-t border-rose-200 bg-rose-50 px-3 py-1.5 text-xs text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300">
+          {uploadError}
+        </p>
+      )}
+
       {/* Pastki qator */}
       <div className="flex items-center justify-between gap-3 rounded-b-xl border-t border-slate-100 bg-slate-50/60 px-3 py-1.5 text-[11px] text-slate-400 dark:border-slate-800 dark:bg-slate-800/30">
-        <span className="hidden sm:inline">Ctrl+B qalin · Ctrl+I kursiv · Ctrl+K havola</span>
+        <span className="hidden sm:inline">
+          {uploading ? "Rasm yuklanmoqda..." : "Ctrl+B qalin · Ctrl+I kursiv · Ctrl+K havola · rasmni shu yerga tashlang"}
+        </span>
         <span className="tabular-nums">
           {counts.words} so&apos;z · {counts.chars} belgi
         </span>

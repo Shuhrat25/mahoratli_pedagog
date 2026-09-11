@@ -53,7 +53,7 @@ export default function GuestHomePage() {
         <section className="grid gap-4 sm:grid-cols-3">
           <FeatureCard
             icon={paths.lessons}
-            title="Uroqlar va testlar"
+            title="Vazifalar va testlar"
             text="Video-darslar, matnli materiallar va avtomatik tekshiriladigan testlar."
           />
           <FeatureCard

@@ -16,11 +16,25 @@ const detailInclude = {
   steps: { orderBy: { order: "asc" } },
   materials: { include: { file: true } },
   questions: { include: { options: true }, orderBy: { order: "asc" } },
-  submissions: { include: { student: true, file: true } },
+  submissions: {
+    include: {
+      student: true,
+      file: true,
+      files: { include: { file: true }, orderBy: { order: "asc" } },
+    },
+  },
 };
 
 function isStaffUser(user) {
   return user.role === "TEACHER" || user.role === "ADMIN";
+}
+
+function shapeSubmissionFiles(s) {
+  // Eski javoblarda faqat `fileId` bor edi — ular ham ro'yxat sifatida qaytadi.
+  if (s.files?.length) {
+    return s.files.map((f) => ({ id: f.id, name: f.file.originalName, fileId: f.file.id }));
+  }
+  return s.file ? [{ id: s.file.id, name: s.file.originalName, fileId: s.file.id }] : [];
 }
 
 function shapeAssignment(a, user) {
@@ -50,6 +64,8 @@ function shapeAssignment(a, user) {
           studentName: `${s.student.firstName} ${s.student.lastName}`,
           fileName: s.file?.originalName,
           fileId: s.file?.id,
+          files: shapeSubmissionFiles(s),
+          text: s.text,
           submittedAt: s.submittedAt,
           score: s.score,
           comment: s.comment,
@@ -61,6 +77,8 @@ function shapeAssignment(a, user) {
             id: mySubmission.id,
             studentId: mySubmission.studentId,
             fileName: mySubmission.file?.originalName,
+            files: shapeSubmissionFiles(mySubmission),
+            text: mySubmission.text,
             submittedAt: mySubmission.submittedAt,
             score: mySubmission.score,
             comment: mySubmission.comment,
@@ -307,32 +325,63 @@ router.post(
   })
 );
 
+// Talaba ishni topshiradi: bir nechta fayl (10MB chegarasi HAR BIR faylga
+// alohida tegishli, shuning uchun katta ishni bo'lib yuborish mumkin) va
+// ixtiyoriy izoh.
 router.post(
   "/:id/submit",
   requireRole("STUDENT"),
-  upload.single("file"),
+  upload.array("files", 10),
   route(async (req, res) => {
-    if (!req.file) throw new HttpError(400, "Fayl talab qilinadi");
+    const uploaded = req.files || [];
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    if (uploaded.length === 0) throw new HttpError(400, "Kamida bitta fayl tanlang");
+
     const assignment = await prisma.assignment.findUnique({ where: { id: req.params.id } });
     if (!assignment) throw new HttpError(404, "Vazifa topilmadi");
     if (assignment.type === "TEST") throw new HttpError(400, "Bu vazifa TEST turida — fayl emas, javoblar yuboriladi");
     if (new Date(assignment.dueDate) < new Date()) throw new HttpError(403, "Vazifa muddati yopilgan");
 
-    const file = await createUploadedFileRecord(req.file, req.user.id);
+    const records = [];
+    for (const f of uploaded) {
+      records.push(await createUploadedFileRecord(f, req.user.id));
+    }
+
     const submission = await prisma.submission.upsert({
       where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
-      update: { fileId: file.id, submittedAt: new Date(), score: null, comment: null, status: "NOT_REVIEWED" },
-      create: { assignmentId: req.params.id, studentId: req.user.id, fileId: file.id },
+      // fileId birinchi faylga ishora qilib qoladi — eski yozuvlar bilan
+      // moslik va fayl ruxsatlarini tekshirish shunga tayanadi.
+      update: {
+        fileId: records[0].id,
+        text: text || null,
+        submittedAt: new Date(),
+        score: null,
+        comment: null,
+        status: "NOT_REVIEWED",
+      },
+      create: {
+        assignmentId: req.params.id,
+        studentId: req.user.id,
+        fileId: records[0].id,
+        text: text || null,
+      },
+    });
+
+    // Qayta topshirilsa — oldingi fayllar ro'yxati almashtiriladi.
+    await prisma.submissionFile.deleteMany({ where: { submissionId: submission.id } });
+    await prisma.submissionFile.createMany({
+      data: records.map((file, i) => ({ submissionId: submission.id, fileId: file.id, order: i })),
     });
 
     await notifyStaff({
       type: TYPES.SUBMISSION_NEW,
       title: "Yangi javob keldi",
-      body: `${req.user.firstName} ${req.user.lastName} — ${assignment.title}`,
+      body: `${req.user.firstName} ${req.user.lastName} — ${assignment.title} (${records.length} ta fayl)`,
       link: `/teacher/assignments/${assignment.id}`,
     });
 
-    res.status(201).json({ submission });
+    const a = await prisma.assignment.findUnique({ where: { id: req.params.id }, include: detailInclude });
+    res.status(201).json({ assignment: shapeAssignment(a, req.user) });
   })
 );
 

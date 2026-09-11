@@ -181,6 +181,7 @@ function BannersTab() {
             <label className="label">Matn</label>
             <RichTextEditor
               compact
+              allowImages={false}
               value={text}
               onChange={setText}
               placeholder="Banner ostidagi qisqa matn..."
@@ -476,12 +477,14 @@ function PostsTab() {
           </div>
           <div>
             <label className="label">Post matni (ixtiyoriy)</label>
+            {/* Postlar bo'limi — tahrirlagichning TO'LIQ versiyasi: barcha
+                asboblar, rasm qo'yish va butun ekran rejimi. */}
             <RichTextEditor
               value={text}
               onChange={setText}
-              placeholder="Post matni — sarlavhalar, ro'yxatlar, havolalar va rangli ajratmalar bilan..."
+              placeholder="Post matni — sarlavhalar, ro'yxatlar, rasmlar, havolalar va rangli ajratmalar bilan..."
               ariaLabel="Post matni"
-              minHeight={240}
+              minHeight={360}
             />
           </div>
           <div>

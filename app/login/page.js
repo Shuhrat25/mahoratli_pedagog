@@ -1,16 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useApp } from "@/lib/auth-context";
 
-export default function LoginPage() {
-  const { login } = useApp();
+function homeFor(role) {
+  return role === "STUDENT" ? "/student" : "/teacher";
+}
+
+/**
+ * Kirgandan keyin qayerga qaytarish kerakligini aniqlaydi.
+ *
+ * Faqat shu saytning ichki yo'llari qabul qilinadi ("/..."), aks holda
+ * ?next=https://evil.example bilan foydalanuvchini begona saytga jo'natish
+ * mumkin bo'lardi (ochiq redirect).
+ */
+function safeNext(raw) {
+  if (!raw) return null;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
+  return raw;
+}
+
+function LoginForm() {
+  const { login, currentUser, ready } = useApp();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = safeNext(searchParams.get("next"));
   const [loginOrEmail, setLoginOrEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
+  // Allaqachon kirgan bo'lsa, login sahifasida ushlab turmaymiz — aks holda
+  // post sahifasidan "kirish" tugmasi bosilganda cheksiz aylanish hosil bo'lardi.
+  useEffect(() => {
+    if (!ready || !currentUser) return;
+    router.replace(next || homeFor(currentUser.role));
+  }, [ready, currentUser, next, router]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -19,7 +45,8 @@ export default function LoginPage() {
       setError(result.error);
       return;
     }
-    router.push(result.user.role === "STUDENT" ? "/student" : "/teacher");
+    // Qaerdan kelgan bo'lsa — o'sha sahifaga qaytaramiz (masalan postga).
+    router.push(next || homeFor(result.user.role));
   }
 
   return (
@@ -74,5 +101,16 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// useSearchParams Suspense chegarasini talab qiladi (Next.js App Router).
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={<div className="flex min-h-screen items-center justify-center text-slate-400">Yuklanmoqda...</div>}
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

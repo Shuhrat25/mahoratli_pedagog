@@ -35,7 +35,6 @@ export default function ForumThreadView({ basePath }) {
   const canModerate = currentUser?.role === "TEACHER" || currentUser?.role === "ADMIN";
   const isAuthor = thread.authorId === currentUser?.id;
   const canEdit = canModerate || isAuthor;
-  const isStaff = canModerate;
 
   async function addReply(e) {
     e.preventDefault();
@@ -106,11 +105,7 @@ export default function ForumThreadView({ basePath }) {
         {editing ? (
           <form onSubmit={saveEdit} className="space-y-3">
             <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="input" required />
-            {isStaff ? (
-              <RichTextEditor value={editBody} onChange={setEditBody} placeholder="Mavzu matni..." minHeight={160} />
-            ) : (
-              <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} className="input" rows={4} />
-            )}
+            <RichTextEditor value={editBody} onChange={setEditBody} placeholder="Mavzu matni..." minHeight={160} />
             <div className="flex gap-2">
               <button type="submit" className="btn-primary">
                 Saqlash
@@ -165,23 +160,16 @@ export default function ForumThreadView({ basePath }) {
         {thread.replies.length === 0 && <p className="text-sm text-slate-500">Hali javob yo&apos;q — birinchi bo&apos;ling.</p>}
       </div>
 
-      {isStaff ? (
-        <form onSubmit={addReply} className="mt-4 space-y-2">
-          <RichTextEditor compact value={reply} onChange={setReply} placeholder="Javob yozing..." ariaLabel="Forum javobi" />
-          <div className="flex justify-end">
-            <button type="submit" className="btn-primary" disabled={sending}>
-              {sending ? "Yuborilmoqda..." : "Yuborish"}
-            </button>
-          </div>
-        </form>
-      ) : (
-        <form onSubmit={addReply} className="mt-4 flex gap-2">
-          <input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Javob yozing..." className="input" />
-          <button type="submit" className="btn-primary shrink-0" disabled={sending}>
-            Yuborish
+      {/* Javob maydoni ikkala rol uchun ham rich-text — forum yagona joy
+          bo'lib, u yerda talaba ham formatlab yoza oladi. */}
+      <form onSubmit={addReply} className="mt-4 space-y-2">
+        <RichTextEditor compact value={reply} onChange={setReply} placeholder="Javob yozing..." ariaLabel="Forum javobi" />
+        <div className="flex justify-end">
+          <button type="submit" className="btn-primary" disabled={sending}>
+            {sending ? "Yuborilmoqda..." : "Yuborish"}
           </button>
-        </form>
-      )}
+        </div>
+      </form>
     </div>
   );
 }

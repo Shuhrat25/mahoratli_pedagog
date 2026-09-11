@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { forumApi } from "@/lib/api";
-import { useApp } from "@/lib/auth-context";
 import Modal from "@/components/Modal";
 import RichTextEditor from "@/components/RichTextEditor";
 import Pagination from "@/components/Pagination";
@@ -12,12 +11,7 @@ import { plainTextFromHtml, truncate } from "@/lib/richText";
 import { Icon, paths } from "@/components/icons";
 
 export default function ForumList({ basePath }) {
-  const { currentUser } = useApp();
   const { success, error: toastError } = useToast();
-
-  // Rich-text tahrirlagich faqat o'qituvchi/admin kabinetida — talabalar
-  // uchun oddiy maydon qoladi (forum sahifasi ikkala rol uchun umumiy).
-  const isStaff = currentUser?.role === "TEACHER" || currentUser?.role === "ADMIN";
 
   const [threads, setThreads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -122,7 +116,7 @@ export default function ForumList({ basePath }) {
 
       <Pagination page={page} pages={pages} onChange={setPage} className="mt-4" />
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Yangi mavzu yaratish" wide={isStaff}>
+      <Modal open={open} onClose={() => setOpen(false)} title="Yangi mavzu yaratish" wide>
         <form onSubmit={createThread} className="space-y-3">
           <div>
             <label className="label">Sarlavha</label>
@@ -130,11 +124,10 @@ export default function ForumList({ basePath }) {
           </div>
           <div>
             <label className="label">Matn (ixtiyoriy)</label>
-            {isStaff ? (
-              <RichTextEditor value={text} onChange={setText} placeholder="Mavzu bo'yicha batafsil..." ariaLabel="Mavzu matni" minHeight={160} />
-            ) : (
-              <textarea value={text} onChange={(e) => setText(e.target.value)} className="input" rows={4} />
-            )}
+            {/* Forum — talabalar ham rich-text bilan yozadigan yagona joy:
+                savolni tushunarli qilish uchun ro'yxat, iqtibos va havola kerak
+                bo'ladi. Qolgan talaba maydonlari (izohlar va h.k.) oddiy matn. */}
+            <RichTextEditor value={text} onChange={setText} placeholder="Mavzu bo'yicha batafsil..." ariaLabel="Mavzu matni" minHeight={160} />
           </div>
           <button type="submit" className="btn-primary w-full" disabled={saving}>
             {saving ? "Saqlanmoqda..." : "Yaratish"}

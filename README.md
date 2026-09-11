@@ -31,7 +31,9 @@ The app's interface is in Uzbek (Latin script), built around a national-values c
   format (`~` correct answer, `==` incorrect answer, `++++` question separator)
 - In-app notifications (new assignment, grade received, deadline in under 24h, forum reply,
   new post, scheduled live lesson) delivered instantly over WebSocket
-- Assignments with file upload, grading, and comments from the teacher
+- Assignments: a dedicated submission page where several files can be attached at once
+  (each up to 10 MB, so a large piece of work can be split) plus an optional note to the
+  teacher; grading and comments come back on the assignment page
 - Downloadable materials
 - Forum (create threads, reply)
 - Profile with light/dark theme
@@ -48,9 +50,9 @@ The app's interface is in Uzbek (Latin script), built around a national-values c
 - Polls can be turned into quizzes — the correct answer is revealed after voting
 - Lessons/topics management with drag-style reordering and the DOCX/PDF test importer
 - **Rich text everywhere the teacher writes** — a dependency-free WYSIWYG editor
-  (headings, lists, quotes, code blocks, colours/highlight, alignment, links,
-  fullscreen) on banners, posts, lesson content, assignment descriptions, grading
-  comments and forum posts. Students still get plain inputs.
+  (headings, lists, quotes, code blocks, colours/highlight, alignment, links, inline
+  images, fullscreen) on banners, posts, lesson content, assignment descriptions,
+  grading comments and the forum.
 - Assignment creation and grading (grades feed into a student point/rating system)
 - Grade export to CSV (opens directly in Excel)
 - Materials management (batch upload)
@@ -219,6 +221,20 @@ Teacher/admin text fields store **HTML**, produced by `components/RichTextEditor
 (zero dependencies, built on `contentEditable`). Older records are still plain text —
 `components/RichText.jsx` detects which is which, so no data migration was needed.
 
+**Where students get it too:** the **forum** — and only the forum. Students ask questions
+there that need lists, quotes, links and screenshots, so both creating a thread and
+replying use the editor. Everywhere else a student types (post comments, profile) stays a
+plain input.
+
+**Images** are uploaded through `POST /api/files/inline` by the toolbar button, by pasting
+a screenshot, or by dropping a file into the editor, and are embedded as
+`<img src="/api/files/<id>">`. Size limits follow the same per-role rule as every other
+upload. Such a file is attached to no table, so `GET /api/files/:id` treats any image that
+is not someone's submission as readable by any signed-in user — which is exactly what an
+image embedded in shared content needs. The public post page rewrites those URLs to
+`/api/files/public/<id>`, which serves an image only when it appears in a published post
+or banner, so guests and link-preview bots can see it without an account.
+
 HTML is sanitised **twice**, against a tag/attribute allowlist:
 
 - **Server** (`server/src/lib/sanitizeHtml.js`) before every write — this is the one that
@@ -231,7 +247,8 @@ stripped; surviving `<a>` tags get `target="_blank" rel="noopener noreferrer nof
 
 ## Uploads, rate limiting and other guardrails
 
-- **Upload size**: students are capped at **10 MB** per file and to a list of document /
+- **Upload size**: students are capped at **10 MB** *per file* — a submission can carry up
+  to 10 files, so the cap never blocks a large piece of work — and to a list of document /
   image / audio / video / archive types. Teachers and admins have **no size limit** (they
   upload large course material) and only executable file types are blocked. The two limits
   are two `multer` instances picked per request by role — see `server/src/middleware/upload.js`.

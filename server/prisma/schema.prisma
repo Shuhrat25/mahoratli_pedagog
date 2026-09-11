@@ -267,9 +267,14 @@ model Submission {
   fileId       String?
   file         UploadedFile? @relation(fields: [fileId], references: [id])
   submittedAt  DateTime      @default(now())
+  // Talabaning ishga qo'shimcha izohi (ixtiyoriy).
+  text         String?
   score        Int?
   comment      String?
   status       String        @default("NOT_REVIEWED")
+  // Bir nechta fayl. `fileId` birinchi faylga ishora qilib qoladi — eski
+  // yozuvlar va fayl ruxsatlarini tekshirish shunga tayanadi.
+  files        SubmissionFile[]
 
   @@unique([assignmentId, studentId])
 }
@@ -318,6 +323,7 @@ model UploadedFile {
 
   assignmentMaterials AssignmentMaterial[]
   lessonMaterials     LessonMaterial[]
+  submissionFiles     SubmissionFile[]
   submissions         Submission[]
   materials           Material[]
   banners             Banner[]
@@ -351,4 +357,18 @@ model DailyActivity {
 
   @@unique([userId, day])
   @@index([day])
+}
+
+// Talaba javobiga biriktirilgan fayllar. Ilgari javobda faqat BITTA fayl
+// bo'lardi va 10MB chegarasiga sig'masa, ishni bo'lib yuborishning iloji
+// yo'q edi.
+model SubmissionFile {
+  id           String       @id @default(cuid())
+  submissionId String
+  submission   Submission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  fileId       String
+  file         UploadedFile @relation(fields: [fileId], references: [id])
+  order        Int          @default(0)
+
+  @@index([submissionId])
 }

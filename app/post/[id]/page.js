@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 // EMAS, "@/lib/richTextCore" dan. Birinchisida "use client" bor va uning
 // eksportlari serverda chaqirib bo'lmaydigan mijoz havolalariga aylanadi.
 import { sanitizeHtmlString, looksLikeHtml, plainTextFromHtml, truncate } from "@/lib/richTextCore";
+import { PublicPostHeaderAction, PublicPostDiscussion } from "@/components/PublicPostCta";
 
 // Postning alohida sahifasi — SERVERDA render qilinadi.
 //
@@ -76,7 +77,11 @@ export default async function PublicPostPage({ params }) {
   if (!post) notFound();
 
   const date = new Date(post.publishedAt || post.createdAt);
-  const body = looksLikeHtml(post.text) ? sanitizeHtmlString(post.text) : null;
+  // Matn ichidagi rasmlar avtorizatsiya talab qiladigan /api/files/<id> ga
+  // ishora qiladi — mehmon uchun ularni ochiq ko'rinishga o'tkazamiz.
+  const body = looksLikeHtml(post.text)
+    ? sanitizeHtmlString(post.text).replace(/(<img[^>]+src=")\/api\/files\/(?!public\/)/g, "$1/api/files/public/")
+    : null;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -85,9 +90,7 @@ export default async function PublicPostPage({ params }) {
           <Link href="/" className="text-lg font-bold text-brand-700 dark:text-brand-400">
             Mahoratli pedagog
           </Link>
-          <Link href="/login" className="btn-primary">
-            Kirish
-          </Link>
+          <PublicPostHeaderAction postId={post.id} />
         </div>
       </header>
 
@@ -139,9 +142,7 @@ export default async function PublicPostPage({ params }) {
           <div className="mt-6 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-4 text-sm text-slate-500 dark:border-slate-800">
             <span>❤ {post.likes}</span>
             <span>💬 {post.commentCount ?? 0}</span>
-            <Link href="/login" className="text-brand-700 hover:underline dark:text-brand-400">
-              Muhokamada qatnashish uchun kiring
-            </Link>
+            <PublicPostDiscussion postId={post.id} />
           </div>
         </article>
       </main>

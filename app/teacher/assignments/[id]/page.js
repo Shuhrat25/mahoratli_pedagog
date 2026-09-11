@@ -74,10 +74,23 @@ export default function TeacherAssignmentDetailPage() {
               <tr key={s.id} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
                 <td className="px-4 py-3 font-medium">{s.studentName}</td>
                 {assignment.type !== "TEST" && (
-                  <td className="px-4 py-3 text-brand-700 dark:text-brand-400">
-                    <a href={fileUrl(s.fileId)} className="inline-flex items-center gap-1 hover:underline">
-                      <Icon path={paths.download} className="h-4 w-4" /> {s.fileName}
-                    </a>
+                  <td className="px-4 py-3">
+                    <ul className="space-y-1">
+                      {(s.files || []).map((f) => (
+                        <li key={f.id}>
+                          <a
+                            href={fileUrl(f.fileId)}
+                            className="inline-flex items-center gap-1 text-brand-700 hover:underline dark:text-brand-400"
+                          >
+                            <Icon path={paths.download} className="h-4 w-4 shrink-0" /> {f.name}
+                          </a>
+                        </li>
+                      ))}
+                      {(s.files || []).length === 0 && <li className="text-slate-400">—</li>}
+                    </ul>
+                    {s.text && (
+                      <p className="mt-1.5 max-w-xs whitespace-pre-line text-xs text-slate-500">{s.text}</p>
+                    )}
                   </td>
                 )}
                 <td className="px-4 py-3">
@@ -118,7 +131,29 @@ export default function TeacherAssignmentDetailPage() {
       <Modal open={!!grading} onClose={() => setGrading(null)} title="Baholash">
         {grading && (
           <form onSubmit={saveGrade} className="space-y-3">
-            <p className="text-sm text-slate-500">{grading.studentName} — {grading.fileName}</p>
+            <p className="text-sm text-slate-500">
+              {grading.studentName} — {(grading.files || []).length} ta fayl
+            </p>
+            {(grading.files || []).length > 0 && (
+              <ul className="space-y-1 text-sm">
+                {grading.files.map((f) => (
+                  <li key={f.id}>
+                    <a
+                      href={fileUrl(f.fileId)}
+                      className="inline-flex items-center gap-1 text-brand-700 hover:underline dark:text-brand-400"
+                    >
+                      <Icon path={paths.download} className="h-4 w-4" /> {f.name}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {grading.text && (
+              <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Talaba izohi</p>
+                <p className="whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">{grading.text}</p>
+              </div>
+            )}
             <div>
               <label className="label">Ball (max {assignment.maxScore})</label>
               <input type="number" max={assignment.maxScore} min={0} value={score} onChange={(e) => setScore(e.target.value)} className="input" required />
