@@ -136,3 +136,64 @@ body {
   content: attr(data-placeholder);
   @apply pointer-events-none block text-slate-400 dark:text-slate-500;
 }
+
+/* --------------------------------------------------------------------------
+   Scrollbar.
+
+   Tizimning standart scrollbar'i (ayniqsa Windows'da) keng va och kulrang —
+   qorong'i mavzuda u yaqqol ajralib turardi, modal oynada esa yumaloqlangan
+   burchak ustiga chiqib qolardi. Quyidagi qoidalar uni ingichka, yumaloq va
+   mavzuga mos qiladi. Shaffof ramka + background-clip hiylasi thumb atrofida
+   bo'shliq hosil qiladi, shuning uchun u "tayoqcha" emas, "tabletka" ko'rinadi.
+   -------------------------------------------------------------------------- */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(203 213 225) transparent;
+}
+.dark * {
+  scrollbar-color: rgb(51 65 85) transparent;
+}
+
+/* Chrome, Edge, Safari */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgb(203 213 225); /* slate-300 */
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(148 163 184); /* slate-400 */
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgb(51 65 85); /* slate-700 */
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(71 85 105); /* slate-600 */
+}
+
+/* Sichqoncha ustiga kelgunicha scrollbar ko'rinmaydigan joylar — masalan
+   yon menyu va bildirishnomalar ro'yxati: u yerda u faqat xalaqit berardi. */
+.scrollbar-soft::-webkit-scrollbar-thumb {
+  background-color: transparent;
+}
+.scrollbar-soft:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(203 213 225);
+}
+.dark .scrollbar-soft:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(51 65 85);
+}

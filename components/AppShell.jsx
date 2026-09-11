@@ -110,7 +110,7 @@ function SidebarContent({ navItems, pathname, roleLabel, currentUser, profileHre
         </div>
       </Link>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <nav className="scrollbar-soft flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + "/");
           return (

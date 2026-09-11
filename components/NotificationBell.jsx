@@ -95,7 +95,7 @@ export default function NotificationBell({ basePath }) {
             </div>
           </div>
 
-          <div className="max-h-[60vh] overflow-y-auto">
+          <div className="scrollbar-soft max-h-[60vh] overflow-y-auto">
             {notifications.length === 0 && (
               <p className="px-4 py-8 text-center text-sm text-slate-400">Hozircha bildirishnoma yo&apos;q</p>
             )}
