@@ -199,6 +199,8 @@ model LessonProgress {
   completed   Boolean   @default(false)
   score       Int?
   attempts    Int       @default(0)
+  // Dars testining joriy urinishi qachon boshlangani (vaqt hisobi serverda).
+  testStartedAt DateTime?
   completedAt DateTime?
 
   @@unique([lessonId, userId])
@@ -275,6 +277,9 @@ model Submission {
   text         String?
   // TEST turidagi vazifada nechanchi urinish ekani.
   attempts     Int           @default(0)
+  // Joriy urinish qachon boshlangani. Vaqt hisobi SERVERDA yuritiladi —
+  // aks holda talaba sahifani yangilab, taymerni qaytadan boshlashi mumkin edi.
+  testStartedAt DateTime?
   score        Int?
   comment      String?
   status       String        @default("NOT_REVIEWED")

@@ -7,6 +7,7 @@ import Modal from "@/components/Modal";
 import KebabMenu from "@/components/KebabMenu";
 import RichTextEditor from "@/components/RichTextEditor";
 import { useToast } from "@/components/ToastProvider";
+import { formatDuration } from "@/lib/formatDuration";
 import { isEmptyHtml } from "@/lib/richText";
 import { Icon, paths } from "@/components/icons";
 
@@ -237,7 +238,7 @@ export default function TeacherTopicLessonsPage() {
                     <>
                       <span>{lesson.questions?.length || 0} savol</span>
                       <span>· o&apos;tish balli {lesson.passScore}%</span>
-                      {lesson.timeLimitSec ? <span>· {Math.round(lesson.timeLimitSec / 60)} daqiqa</span> : null}
+                      {lesson.timeLimitSec ? <span>· {formatDuration(lesson.timeLimitSec)}</span> : null}
                       {lesson.maxAttempts ? <span>· {lesson.maxAttempts} urinish</span> : null}
                       {lesson.shuffle ? <span>· aralashtiriladi</span> : null}
                     </>

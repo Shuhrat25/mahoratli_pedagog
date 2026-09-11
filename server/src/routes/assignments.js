@@ -9,6 +9,7 @@ const { sanitizeHtml, isEmptyHtml } = require("../lib/sanitizeHtml");
 const { HttpError, route } = require("../lib/httpError");
 const { toCsv } = require("../lib/csv");
 const { notify, notifyAllStudents, notifyStaff, TYPES } = require("../lib/notifications");
+const { isWindowOpen, isExpired, endsAt } = require("../lib/testWindow");
 
 const router = express.Router();
 
@@ -303,6 +304,64 @@ router.post(
   })
 );
 
+// Testni boshlash. Vaqt hisobi shu yerdan ketadi: boshlanish vaqti bazaga
+// yoziladi, front esa faqat tugash vaqtini oladi — sahifani yangilash yoki
+// tabni yopib qaytish vaqtni uzaytirmaydi.
+router.post(
+  "/:id/start-test",
+  requireRole("STUDENT"),
+  route(async (req, res) => {
+    const assignment = await prisma.assignment.findUnique({ where: { id: req.params.id } });
+    if (!assignment) throw new HttpError(404, "Vazifa topilmadi");
+    if (assignment.type !== "TEST") throw new HttpError(400, "Bu vazifa TEST turida emas");
+    if (new Date(assignment.dueDate) < new Date()) throw new HttpError(403, "Vazifa muddati yopilgan");
+
+    const where = { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } };
+    let submission = await prisma.submission.findUnique({ where });
+
+    // Oldingi urinish boshlangan, lekin yakunlanmagan va vaqti tugagan bo'lsa —
+    // u yo'qolgan urinish sifatida yopiladi (aks holda vaqt tugagach sahifani
+    // yangilab, yangi oynani cheksiz ochish mumkin bo'lardi).
+    const startedNotSubmitted =
+      submission?.testStartedAt &&
+      (!submission.submittedAt || submission.submittedAt <= submission.testStartedAt);
+    if (startedNotSubmitted && !isWindowOpen(submission.testStartedAt, assignment.timeLimitSec)) {
+      submission = await prisma.submission.update({
+        where,
+        data: {
+          attempts: (submission.attempts || 0) + 1,
+          testStartedAt: null,
+          // Hech narsa yuborilmagan bo'lsa — 0 ball qayd etiladi.
+          ...(submission.score == null ? { score: 0, status: "REVIEWED", submittedAt: new Date() } : {}),
+        },
+      });
+    }
+
+    const used = submission?.attempts || 0;
+    const windowOpen = submission?.testStartedAt && isWindowOpen(submission.testStartedAt, assignment.timeLimitSec);
+
+    // Ochiq oyna bo'lmasa — yangi urinish; urinishlar tugagan bo'lsa ruxsat yo'q.
+    if (!windowOpen) {
+      if (assignment.maxAttempts && used >= assignment.maxAttempts) {
+        throw new HttpError(403, `Urinishlar tugadi (${assignment.maxAttempts} tadan ${used} ta ishlatilgan)`);
+      }
+      submission = await prisma.submission.upsert({
+        where,
+        update: { testStartedAt: new Date() },
+        create: { assignmentId: req.params.id, studentId: req.user.id, testStartedAt: new Date() },
+      });
+    }
+
+    res.json({
+      startedAt: submission.testStartedAt,
+      endsAt: endsAt(submission.testStartedAt, assignment.timeLimitSec),
+      timeLimitSec: assignment.timeLimitSec,
+      attempts: submission.attempts || 0,
+      maxAttempts: assignment.maxAttempts,
+    });
+  })
+);
+
 router.post(
   "/:id/submit-test",
   requireRole("STUDENT"),
@@ -327,6 +386,19 @@ router.post(
       );
     }
 
+    // Vaqti tugagan javob qabul qilinmaydi — urinish esa sarflangan hisoblanadi.
+    if (assignment.timeLimitSec && isExpired(existing?.testStartedAt, assignment.timeLimitSec)) {
+      await prisma.submission.update({
+        where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
+        data: {
+          attempts: usedAttempts + 1,
+          testStartedAt: null,
+          ...(existing.score == null ? { score: 0, status: "REVIEWED", submittedAt: new Date() } : {}),
+        },
+      });
+      throw new HttpError(403, "Test vaqti tugagan");
+    }
+
     let correctCount = 0;
     const results = assignment.questions.map((q) => {
       const { correctIds, chosenIds, isCorrect } = gradeQuestion(q, answers?.[q.id]);
@@ -340,7 +412,7 @@ router.post(
     const attempts = usedAttempts + 1;
     await prisma.submission.upsert({
       where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
-      update: { fileId: null, submittedAt: new Date(), score, comment: null, status: "REVIEWED", attempts },
+      update: { fileId: null, submittedAt: new Date(), score, comment: null, status: "REVIEWED", attempts, testStartedAt: null },
       create: { assignmentId: req.params.id, studentId: req.user.id, score, status: "REVIEWED", attempts },
     });
 

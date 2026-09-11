@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { topicsApi, fileUrl } from "@/lib/api";
 import RichText from "@/components/RichText";
 import { useToast } from "@/components/ToastProvider";
+import { formatDuration, formatClock } from "@/lib/formatDuration";
 import { Icon, paths } from "@/components/icons";
 
 function findNextLesson(topics, topicId, lessonId) {
@@ -22,12 +23,6 @@ function findNextLesson(topics, topicId, lessonId) {
   return null;
 }
 
-function formatClock(seconds) {
-  const m = Math.floor(Math.max(0, seconds) / 60);
-  const s = Math.max(0, seconds) % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
 export default function LessonPage() {
   const { topicId, lessonId } = useParams();
   const router = useRouter();
@@ -38,6 +33,10 @@ export default function LessonPage() {
   const [testResult, setTestResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [remaining, setRemaining] = useState(null);
+  // Tugash vaqti SERVERdan keladi — sahifani yangilash vaqtni qaytarmaydi.
+  const [endsAt, setEndsAt] = useState(null);
+  const [timedOut, setTimedOut] = useState(false);
+  const [startError, setStartError] = useState("");
   const submitRef = useRef(null);
 
   const load = useCallback(
@@ -53,29 +52,55 @@ export default function LessonPage() {
     setAnswers({});
     setTestResult(null);
     setRemaining(null);
+    setEndsAt(null);
+    setTimedOut(false);
+    setStartError("");
     load();
   }, [topicId, lessonId, load]);
 
   const topic = topics?.find((t) => t.id === topicId);
   const lesson = topic?.lessons.find((l) => l.id === lessonId);
 
-  // Test uchun vaqt chegarasi: hisob tugaganda javoblar avtomatik yuboriladi.
+  // Testni boshlash — server urinish oynasini ochadi va tugash vaqtini beradi.
   useEffect(() => {
-    if (!lesson || lesson.type !== "TEST" || !lesson.timeLimitSec || testResult) return;
-    setRemaining((prev) => (prev === null ? lesson.timeLimitSec : prev));
-    const id = setInterval(() => {
-      setRemaining((prev) => {
-        if (prev === null) return null;
-        if (prev <= 1) {
-          clearInterval(id);
-          submitRef.current?.();
-          return 0;
-        }
-        return prev - 1;
+    if (!lesson || lesson.type !== "TEST" || lesson.locked || testResult || timedOut) return;
+    let cancelled = false;
+    topicsApi
+      .startTest(topicId, lesson.id)
+      .then((info) => {
+        if (cancelled) return;
+        setEndsAt(info.endsAt);
+        setStartError("");
+      })
+      .catch((err) => {
+        if (!cancelled) setStartError(err.message || "Testni boshlab bo'lmadi");
       });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson?.id, lesson?.type, lesson?.locked]);
+
+  // Hisob serverdagi tugash vaqtidan yuritiladi; nolda avtomatik yuboriladi.
+  useEffect(() => {
+    if (!endsAt || testResult || timedOut) return;
+    function tick() {
+      const left = Math.round((new Date(endsAt).getTime() - Date.now()) / 1000);
+      if (left <= 0) {
+        setRemaining(0);
+        setTimedOut(true);
+        submitRef.current?.({ auto: true });
+        return true;
+      }
+      setRemaining(left);
+      return false;
+    }
+    if (tick()) return;
+    const timer = setInterval(() => {
+      if (tick()) clearInterval(timer);
     }, 1000);
-    return () => clearInterval(id);
-  }, [lesson?.id, lesson?.type, lesson?.timeLimitSec, testResult]);
+    return () => clearInterval(timer);
+  }, [endsAt, testResult, timedOut]);
 
   if (!topics) return <div className="text-slate-400">Yuklanmoqda...</div>;
   if (!topic || !lesson) return <p>Dars topilmadi.</p>;
@@ -124,7 +149,8 @@ export default function LessonPage() {
   }
 
   async function submitTest(e) {
-    e?.preventDefault?.();
+    const auto = e?.auto === true;
+    if (!auto) e?.preventDefault?.();
     if (submitting) return;
     setSubmitting(true);
     try {
@@ -132,7 +158,8 @@ export default function LessonPage() {
       setTestResult(result);
       setRemaining(null);
       await load();
-      if (result.passed) success(`Test topshirildi — ${result.score}%`);
+      if (auto) toastError(`Vaqt tugadi — javoblaringiz yuborildi: ${result.score}%`);
+      else if (result.passed) success(`Test topshirildi — ${result.score}%`);
     } catch (err) {
       toastError(err.message || "Testni yuborib bo'lmadi");
     } finally {
@@ -144,7 +171,14 @@ export default function LessonPage() {
   function retryTest() {
     setTestResult(null);
     setAnswers({});
-    setRemaining(lesson.timeLimitSec || null);
+    setRemaining(null);
+    setEndsAt(null);
+    setTimedOut(false);
+    // Yangi urinish oynasini server ochadi (yuqoridagi effekt qayta ishlaydi).
+    topicsApi
+      .startTest(topicId, lessonId)
+      .then((info) => setEndsAt(info.endsAt))
+      .catch((err) => setStartError(err.message || "Testni boshlab bo'lmadi"));
   }
 
   const attemptsLeft = lesson.maxAttempts ? Math.max(0, lesson.maxAttempts - (lesson.attempts || 0)) : null;
@@ -220,11 +254,37 @@ export default function LessonPage() {
         </div>
       )}
 
-      {lesson.type === "TEST" && (
+      {lesson.type === "TEST" && timedOut && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-center dark:border-rose-900 dark:bg-rose-950/40">
+          <p className="text-3xl">⏱</p>
+          <h2 className="mt-2 text-lg font-bold">Vaqt tugadi</h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            Test yakunlandi. Belgilashga ulgurgan javoblaringiz hisobga olindi.
+          </p>
+          {submitting && <p className="mt-3 text-sm text-slate-500">Javoblar yuborilmoqda...</p>}
+          {testResult && (
+            <p className="mt-3 text-base font-semibold">
+              Natija: {testResult.correctCount} / {testResult.total} ({testResult.score}%) —{" "}
+              {testResult.passed ? "o'tdingiz" : `o'tish balli ${testResult.passScore}%`}
+            </p>
+          )}
+          <button
+            onClick={() => router.push(`/student/lessons/${topicId}`)}
+            className="mt-5 rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700"
+          >
+            Mavzular ro&apos;yxatiga
+          </button>
+        </div>
+      )}
+
+      {lesson.type === "TEST" && !timedOut && (
         <form onSubmit={submitTest} className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600 dark:text-slate-400">
               <span>{lesson.questions.length} savol</span>
+              <span>
+                Vaqt: <b>{formatDuration(lesson.timeLimitSec) || "cheklanmagan"}</b>
+              </span>
               <span>O&apos;tish balli: <b>{lesson.passScore}%</b></span>
               {lesson.maxAttempts && (
                 <span>
@@ -232,6 +292,7 @@ export default function LessonPage() {
                 </span>
               )}
             </div>
+            {startError && <span className="text-xs font-medium text-rose-600">{startError}</span>}
             {remaining !== null && !testResult && (
               <span
                 className={`rounded-full px-3 py-1 font-bold tabular-nums ${

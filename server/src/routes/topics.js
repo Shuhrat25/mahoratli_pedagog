@@ -11,6 +11,7 @@ const { sanitizeHtml } = require("../lib/sanitizeHtml");
 const { HttpError, route } = require("../lib/httpError");
 const { createUploadedFileRecord } = require("../lib/uploadedFile");
 const { notifyAllStudents, TYPES } = require("../lib/notifications");
+const { isWindowOpen, isExpired, endsAt } = require("../lib/testWindow");
 
 const router = express.Router();
 
@@ -422,6 +423,54 @@ router.post(
   })
 );
 
+// Dars testini boshlash — vaqt hisobi serverda (assignments.js dagi kabi).
+router.post(
+  "/:topicId/lessons/:lessonId/start-test",
+  requireAuth,
+  route(async (req, res) => {
+    const locked = await fetchLockedTopics(req.user.id);
+    const topic = locked.find((t) => t.id === req.params.topicId);
+    const lesson = topic?.lessons.find((l) => l.id === req.params.lessonId);
+    if (!lesson) throw new HttpError(404, "Dars topilmadi");
+    if (lesson.locked) throw new HttpError(403, "Bu dars hali qulflangan");
+
+    const full = await prisma.lesson.findUnique({ where: { id: lesson.id } });
+    const where = { lessonId_userId: { lessonId: lesson.id, userId: req.user.id } };
+    let progress = await prisma.lessonProgress.findUnique({ where });
+
+    const startedNotSubmitted =
+      progress?.testStartedAt && (!progress.completedAt || progress.completedAt <= progress.testStartedAt);
+    if (startedNotSubmitted && !isWindowOpen(progress.testStartedAt, full.timeLimitSec)) {
+      progress = await prisma.lessonProgress.update({
+        where,
+        data: { attempts: (progress.attempts || 0) + 1, testStartedAt: null },
+      });
+    }
+
+    const used = progress?.attempts || 0;
+    const windowOpen = progress?.testStartedAt && isWindowOpen(progress.testStartedAt, full.timeLimitSec);
+
+    if (!windowOpen) {
+      if (full.maxAttempts && used >= full.maxAttempts) {
+        throw new HttpError(403, `Urinishlar tugadi (${full.maxAttempts} tadan ${used} ta ishlatilgan)`);
+      }
+      progress = await prisma.lessonProgress.upsert({
+        where,
+        update: { testStartedAt: new Date() },
+        create: { lessonId: lesson.id, userId: req.user.id, testStartedAt: new Date() },
+      });
+    }
+
+    res.json({
+      startedAt: progress.testStartedAt,
+      endsAt: endsAt(progress.testStartedAt, full.timeLimitSec),
+      timeLimitSec: full.timeLimitSec,
+      attempts: progress.attempts || 0,
+      maxAttempts: full.maxAttempts,
+    });
+  })
+);
+
 router.post(
   "/:topicId/lessons/:lessonId/submit-test",
   requireAuth,
@@ -444,6 +493,15 @@ router.post(
     const usedAttempts = existing?.attempts || 0;
     if (full.maxAttempts && usedAttempts >= full.maxAttempts) {
       throw new HttpError(403, `Urinishlar tugadi (${full.maxAttempts} tadan ${usedAttempts} ta ishlatilgan)`);
+    }
+
+    // Vaqti tugagan javob qabul qilinmaydi — urinish sarflangan hisoblanadi.
+    if (full.timeLimitSec && isExpired(existing?.testStartedAt, full.timeLimitSec)) {
+      await prisma.lessonProgress.update({
+        where: { lessonId_userId: { lessonId: lesson.id, userId: req.user.id } },
+        data: { attempts: usedAttempts + 1, testStartedAt: null },
+      });
+      throw new HttpError(403, "Test vaqti tugagan");
     }
 
     let correctCount = 0;
@@ -469,6 +527,7 @@ router.post(
       where: { lessonId_userId: { lessonId: lesson.id, userId: req.user.id } },
       update: {
         attempts,
+        testStartedAt: null,
         score: Math.max(score, existing?.score ?? 0),
         completed: existing?.completed || passed,
         completedAt: existing?.completed ? existing.completedAt : passed ? new Date() : null,

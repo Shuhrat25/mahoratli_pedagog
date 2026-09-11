@@ -26,7 +26,8 @@ The app's interface is in Uzbek (Latin script), built around a national-values c
 - Downloadable per-lesson attachments (slides, PDFs, worksheets)
 - Optional test timer, shuffled questions and attempt limits — on **lessons and
   assignments alike**. Leaving a field empty means no limit: unlimited time, unlimited
-  attempts. When a timer is set it counts down on screen and submits automatically at zero
+  attempts. When a timer is set, the countdown ends the test: answers are submitted
+  automatically and the student is taken out of the test, keeping whatever they had marked
 - Multiple-correct-answer questions: a question with several `~` lines becomes a checkbox
   question, and it only counts as correct when every right answer is ticked and no wrong one is
 - Certificate page once every lesson is complete (print / save as PDF)
@@ -249,6 +250,19 @@ HTML is sanitised **twice**, against a tag/attribute allowlist:
 
 `<script>`, `<iframe>`, every `on*` handler, `javascript:` URLs and CSS `url()` are
 stripped; surviving `<a>` tags get `target="_blank" rel="noopener noreferrer nofollow"`.
+
+## Test timing
+
+The countdown is **not** a client-side convenience. `POST /…/start-test` records when the
+attempt began and returns only the end time, so the browser computes the remaining seconds
+from it — reloading the page, or closing and reopening the tab, does not hand out more time.
+
+On submit the server rejects anything that arrives after the window (plus a 15-second
+allowance for network latency) and marks the attempt as used, so an abandoned test cannot
+be resumed later. If nothing was submitted at all, the attempt is recorded as 0.
+
+A test with no time limit has no end time, no countdown and no expiry — exactly the
+"solve it freely" case.
 
 ## Uploads, rate limiting and other guardrails
 

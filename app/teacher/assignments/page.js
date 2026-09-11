@@ -7,6 +7,7 @@ import Modal from "@/components/Modal";
 import KebabMenu from "@/components/KebabMenu";
 import RichTextEditor from "@/components/RichTextEditor";
 import { useToast } from "@/components/ToastProvider";
+import { formatDuration } from "@/lib/formatDuration";
 import { isEmptyHtml } from "@/lib/richText";
 import { Icon, paths } from "@/components/icons";
 
@@ -165,7 +166,7 @@ export default function TeacherAssignmentsPage() {
                 <p className="font-medium">{a.title}</p>
                 <p className="text-xs text-slate-500">
                   {a.type === "TEST" ? `Test · ${a.questions?.length || 0} savol` : "Fayl"}
-                  {a.type === "TEST" && a.timeLimitSec ? ` · ${Math.round(a.timeLimitSec / 60)} daq` : ""}
+                  {a.type === "TEST" && a.timeLimitSec ? ` · ${formatDuration(a.timeLimitSec)}` : ""}
                   {a.type === "TEST" && a.maxAttempts ? ` · ${a.maxAttempts} urinish` : ""} · Max: {a.maxScore} ·{" "}
                   {a.submissions.length} javob{notReviewed > 0 && ` · ${notReviewed} tekshirilmagan`}
                 </p>
