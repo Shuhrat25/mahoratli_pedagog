@@ -6,9 +6,10 @@ import { topicsApi } from "@/lib/api";
 import { Icon, paths } from "@/components/icons";
 
 function topicProgress(topic) {
-  if (!topic.lessons.length) return 0;
-  const done = topic.lessons.filter((l) => l.done).length;
-  return Math.round((done / topic.lessons.length) * 100);
+  const required = topic.lessons.filter((l) => !l.optional);
+  if (!required.length) return topic.lessons.length ? 100 : 0;
+  const done = required.filter((l) => l.done).length;
+  return Math.round((done / required.length) * 100);
 }
 
 export default function StudentLessonsPage() {
@@ -24,8 +25,8 @@ export default function StudentLessonsPage() {
 
   if (loading) return <div className="text-slate-400">Yuklanmoqda...</div>;
 
-  const totalLessons = topics.reduce((sum, t) => sum + t.lessons.length, 0);
-  const doneLessons = topics.reduce((sum, t) => sum + t.lessons.filter((l) => l.done).length, 0);
+  const totalLessons = topics.reduce((sum, t) => sum + t.lessons.filter((l) => !l.optional).length, 0);
+  const doneLessons = topics.reduce((sum, t) => sum + t.lessons.filter((l) => !l.optional && l.done).length, 0);
 
   return (
     <div>

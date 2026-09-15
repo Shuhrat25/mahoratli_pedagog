@@ -1,9 +1,11 @@
 const express = require("express");
 const fs = require("fs/promises");
+const path = require("path");
 const prisma = require("../db");
 const { requireAuth, requireRole } = require("../middleware/auth");
-const { upload } = require("../middleware/upload");
-const { computeLocks } = require("../lib/lessonAccess");
+const { upload, UPLOAD_DIR } = require("../middleware/upload");
+const { isOptionalLesson } = require("../lib/lessonAccess");
+const { topicsInclude, fetchLockedTopics } = require("../lib/lessonLookup");
 const { extractText } = require("../lib/fileText");
 const { parseTestMarkup } = require("../lib/testMarkup");
 const { LESSON_TYPES } = require("../lib/constants");
@@ -15,30 +17,21 @@ const { isWindowOpen, isExpired, endsAt } = require("../lib/testWindow");
 
 const router = express.Router();
 
-const topicsInclude = {
-  lessons: {
-    orderBy: { order: "asc" },
-    include: {
-      questions: { include: { options: true }, orderBy: { order: "asc" } },
-      materials: { include: { file: true }, orderBy: { order: "asc" } },
-    },
-  },
-};
-
-async function fetchLockedTopics(userId) {
-  const topics = await prisma.topic.findMany({ orderBy: { order: "asc" }, include: topicsInclude });
-  const progress = await prisma.lessonProgress.findMany({ where: { userId } });
-  const progressByLessonId = new Map(progress.map((p) => [p.lessonId, p]));
-  return computeLocks(topics, progressByLessonId);
-}
-
 function shapeMaterials(lesson) {
   return (lesson.materials || []).map((m) => ({ id: m.id, name: m.file.originalName, fileId: m.file.id }));
 }
 
+function shapePuzzleImages(lesson) {
+  return (lesson.puzzleImages || []).map((p) => ({ id: p.id, fileId: p.file.id, name: p.file.originalName }));
+}
+
+function shapeLessonForStaff(lesson) {
+  return { ...lesson, materials: shapeMaterials(lesson), puzzleImages: shapePuzzleImages(lesson) };
+}
+
 function shapeLessonForStudent(lesson) {
-  const { questions, materials, ...rest } = lesson;
-  const shaped = { ...rest, materials: shapeMaterials(lesson) };
+  const { questions, materials, puzzleImages, ...rest } = lesson;
+  const shaped = { ...rest, materials: shapeMaterials(lesson), puzzleImages: shapePuzzleImages(lesson) };
 
   // Qulflangan dars mazmuni umuman yuborilmaydi — ilgari u javobda qolib,
   // faqat interfeys darajasida yashirilardi (DevTools orqali ko'rish mumkin edi).
@@ -51,9 +44,11 @@ function shapeLessonForStudent(lesson) {
       order: lesson.order,
       locked: true,
       done: false,
+      optional: lesson.optional,
       startsAt: lesson.startsAt,
       questionCount: questions?.length || 0,
       materials: [],
+      puzzleImages: [],
     };
   }
 
@@ -116,6 +111,11 @@ function lessonSettingsFromBody(body) {
     const value = Number(body.maxAttempts);
     data.maxAttempts = value > 0 ? Math.round(value) : null;
   }
+  // Pazl bali: bo'sh yoki 0 — ball berilmaydi.
+  if (body.puzzlePoints !== undefined) {
+    const value = Number(body.puzzlePoints);
+    data.puzzlePoints = value > 0 ? Math.min(1000, Math.round(value)) : null;
+  }
   return data;
 }
 
@@ -127,9 +127,7 @@ router.get(
     const staff = isStaff(req.user);
     const topics = locked.map((t) => ({
       ...t,
-      lessons: t.lessons.map((l) =>
-        staff ? { ...l, materials: shapeMaterials(l) } : shapeLessonForStudent(l)
-      ),
+      lessons: t.lessons.map((l) => (staff ? shapeLessonForStaff(l) : shapeLessonForStudent(l))),
     }));
     res.json({ topics });
   })
@@ -155,8 +153,16 @@ router.get(
     ]);
 
     const lessons = topics.flatMap((t) =>
-      t.lessons.map((l) => ({ id: l.id, title: l.title, type: l.type, topicId: t.id, topicTitle: t.title }))
+      t.lessons.map((l) => ({
+        id: l.id,
+        title: l.title,
+        type: l.type,
+        optional: isOptionalLesson(l),
+        topicId: t.id,
+        topicTitle: t.title,
+      }))
     );
+    const requiredLessons = lessons.filter((l) => !l.optional);
     const byUser = new Map();
     progress.forEach((p) => {
       if (!byUser.has(p.userId)) byUser.set(p.userId, new Map());
@@ -169,18 +175,19 @@ router.get(
         const p = mine.get(l.id);
         return { lessonId: l.id, done: !!p?.completed, score: p?.score ?? null, attempts: p?.attempts ?? 0 };
       });
-      const doneCount = cells.filter((c) => c.done).length;
+      // Foiz faqat majburiy darslardan hisoblanadi — pazl ixtiyoriy.
+      const doneCount = requiredLessons.filter((l) => mine.get(l.id)?.completed).length;
       const testScores = cells.filter((c) => c.score != null).map((c) => c.score);
       return {
         student,
         cells,
         doneCount,
-        percent: lessons.length ? Math.round((doneCount / lessons.length) * 100) : 0,
+        percent: requiredLessons.length ? Math.round((doneCount / requiredLessons.length) * 100) : 0,
         averageScore: testScores.length
           ? Math.round(testScores.reduce((s, v) => s + v, 0) / testScores.length)
           : null,
         // Qayerda to'xtab qolgan — birinchi bajarilmagan dars.
-        currentLesson: lessons.find((l) => !mine.get(l.id)?.completed) || null,
+        currentLesson: requiredLessons.find((l) => !mine.get(l.id)?.completed) || null,
       };
     });
 
@@ -364,6 +371,61 @@ router.delete(
   })
 );
 
+// Pazl rasmlari — bitta darsga cheklanmagan miqdorda. Frontend rasmlarni
+// bittadan yuboradi (har birining yuklanishi ko'rinib turishi uchun), lekin
+// bitta so'rovda bir nechtasini yuborish ham mumkin.
+router.post(
+  "/:topicId/lessons/:lessonId/puzzle-images",
+  requireRole("ADMIN", "TEACHER"),
+  upload.array("images"),
+  route(async (req, res) => {
+    const files = req.files || [];
+    try {
+      if (files.length === 0) throw new HttpError(400, "Rasm talab qilinadi");
+      const bad = files.find((f) => !/^image\/(jpeg|png|webp|gif|avif)$/.test(f.mimetype || ""));
+      if (bad) throw new HttpError(400, `"${bad.originalname}" rasm emas (JPG, PNG yoki WEBP kerak)`);
+
+      const lesson = await prisma.lesson.findUnique({ where: { id: req.params.lessonId } });
+      if (!lesson || lesson.topicId !== req.params.topicId) throw new HttpError(404, "Dars topilmadi");
+      if (lesson.type !== "PUZZLE") throw new HttpError(400, "Rasm faqat pazl darsiga qo'shiladi");
+
+      const last = await prisma.puzzleImage.findFirst({
+        where: { lessonId: lesson.id },
+        orderBy: { order: "desc" },
+        select: { order: true },
+      });
+      let order = (last?.order ?? -1) + 1;
+      for (const f of files) {
+        const record = await createUploadedFileRecord(f, req.user.id);
+        await prisma.puzzleImage.create({ data: { lessonId: lesson.id, fileId: record.id, order: order++ } });
+      }
+    } catch (err) {
+      // Rad etilgan so'rovning fayllari diskda qolib ketmasin.
+      if (err instanceof HttpError) {
+        await Promise.all(files.map((f) => fs.unlink(path.join(UPLOAD_DIR, f.filename)).catch(() => {})));
+      }
+      throw err;
+    }
+
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: req.params.lessonId },
+      include: { puzzleImages: topicsInclude.lessons.include.puzzleImages },
+    });
+    res.status(201).json({ puzzleImages: shapePuzzleImages(lesson) });
+  })
+);
+
+router.delete(
+  "/:topicId/lessons/:lessonId/puzzle-images/:imageId",
+  requireRole("ADMIN", "TEACHER"),
+  route(async (req, res) => {
+    const image = await prisma.puzzleImage.findUnique({ where: { id: req.params.imageId } });
+    if (!image || image.lessonId !== req.params.lessonId) throw new HttpError(404, "Rasm topilmadi");
+    await prisma.puzzleImage.delete({ where: { id: image.id } });
+    res.json({ ok: true });
+  })
+);
+
 // ТЗ §6.5: test butun fayl (DOCX/PDF) sifatida ~ / == / ++++ formatida yuklanadi
 router.post(
   "/:topicId/lessons/:lessonId/import-test",
@@ -412,6 +474,10 @@ router.post(
     // shunchaki "tugatildi" deb belgilab, o'tib ketish mumkin edi.
     if (lesson.type === "TEST") {
       throw new HttpError(400, "Test darsi testni yakunlash orqali tugatiladi");
+    }
+    // Pazl darsi rasm yig'ilganda o'zi belgilanadi (routes/puzzles.js).
+    if (lesson.type === "PUZZLE") {
+      throw new HttpError(400, "Pazl darsi rasmni yig'ish orqali tugatiladi");
     }
 
     const progress = await prisma.lessonProgress.upsert({

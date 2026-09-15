@@ -7,6 +7,7 @@ import RichText from "@/components/RichText";
 import { useToast } from "@/components/ToastProvider";
 import { formatDuration, formatClock } from "@/lib/formatDuration";
 import { Icon, paths } from "@/components/icons";
+import PuzzleLesson from "@/components/puzzle/PuzzleLesson";
 
 function findNextLesson(topics, topicId, lessonId) {
   const sorted = [...topics].sort((a, b) => a.order - b.order);
@@ -130,7 +131,8 @@ export default function LessonPage() {
       toastError("Keyingi darsga o'tish uchun testdan o'tish balini oling");
       return;
     }
-    if (!lesson.done) await markDone();
+    // Pazl ixtiyoriy: yig'ilmagan bo'lsa ham shunchaki keyingisiga o'tiladi.
+    if (!lesson.done && lesson.type !== "PUZZLE") await markDone();
     await goNext();
   }
 
@@ -190,8 +192,12 @@ export default function LessonPage() {
           <h1 className="text-lg font-extrabold sm:text-xl">{lesson.title}</h1>
           {lesson.done && (
             <p className="mt-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              ✓ Tugatilgan{lesson.score != null && ` — ${lesson.score}%`}
+              {lesson.type === "PUZZLE" ? "✓ Yig'ilgan" : "✓ Tugatilgan"}
+              {lesson.score != null && ` — ${lesson.score}%`}
             </p>
+          )}
+          {!lesson.done && lesson.type === "PUZZLE" && (
+            <p className="mt-0.5 text-xs font-medium text-slate-500">Pazl · ixtiyoriy</p>
           )}
         </div>
         <div className="flex gap-2">
@@ -211,6 +217,8 @@ export default function LessonPage() {
       </div>
 
       {lesson.type === "LIVE" && <LiveLesson lesson={lesson} onJoin={markDone} />}
+
+      {lesson.type === "PUZZLE" && <PuzzleLesson lesson={lesson} onProgress={load} />}
 
       {lesson.type === "VIDEO" && (
         <div className="space-y-4">

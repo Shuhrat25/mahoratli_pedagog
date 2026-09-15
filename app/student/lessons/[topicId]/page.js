@@ -6,8 +6,14 @@ import { useParams, useRouter } from "next/navigation";
 import { topicsApi } from "@/lib/api";
 import { Icon, paths } from "@/components/icons";
 
-const TYPE_ICON = { VIDEO: paths.lessons, TEXT: paths.materials, TEST: paths.assignments, LIVE: paths.live };
-const TYPE_LABEL = { VIDEO: "Video", TEXT: "Matn", TEST: "Test", LIVE: "Jonli dars" };
+const TYPE_ICON = {
+  VIDEO: paths.lessons,
+  TEXT: paths.materials,
+  TEST: paths.assignments,
+  LIVE: paths.live,
+  PUZZLE: paths.puzzle,
+};
+const TYPE_LABEL = { VIDEO: "Video", TEXT: "Matn", TEST: "Test", LIVE: "Jonli dars", PUZZLE: "Pazl" };
 
 export default function TopicLessonsPage() {
   const { topicId } = useParams();
@@ -29,8 +35,10 @@ export default function TopicLessonsPage() {
 
   if (loading || !topic) return <div className="text-slate-400">Yuklanmoqda...</div>;
 
-  const doneCount = topic.lessons.filter((l) => l.done).length;
-  const pct = topic.lessons.length ? Math.round((doneCount / topic.lessons.length) * 100) : 0;
+  // Ixtiyoriy darslar (pazl) foizga kirmaydi.
+  const required = topic.lessons.filter((l) => !l.optional);
+  const doneCount = required.filter((l) => l.done).length;
+  const pct = required.length ? Math.round((doneCount / required.length) * 100) : topic.lessons.length ? 100 : 0;
 
   return (
     <div>
@@ -52,6 +60,8 @@ export default function TopicLessonsPage() {
             ? "bg-emerald-500"
             : lesson.locked
             ? "bg-slate-300 dark:bg-slate-700"
+            : lesson.optional
+            ? "bg-slate-300 dark:bg-slate-600"
             : "bg-amber-400";
           const row = (
             <div
@@ -62,7 +72,10 @@ export default function TopicLessonsPage() {
               <Icon path={TYPE_ICON[lesson.type] || paths.lessons} className="h-5 w-5 shrink-0 text-indigo-400" />
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">{lesson.title}</p>
-                <p className="text-xs text-slate-500">{TYPE_LABEL[lesson.type] || lesson.type}</p>
+                <p className="text-xs text-slate-500">
+                  {TYPE_LABEL[lesson.type] || lesson.type}
+                  {lesson.optional && " · ixtiyoriy"}
+                </p>
               </div>
               {lesson.locked ? (
                 <Icon path={paths.lock} className="h-4 w-4 shrink-0 text-slate-400" />

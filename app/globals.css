@@ -197,3 +197,39 @@ body {
 .dark .scrollbar-soft:hover::-webkit-scrollbar-thumb {
   background-color: rgb(51 65 85);
 }
+
+/* Pazl yig'ilgach butun rasm silliq paydo bo'ladi — bo'laklar orasidagi
+   ingichka chiziqlarni yopadi. */
+.puzzle-reveal {
+  animation: puzzle-reveal 0.7s ease-out both;
+}
+@keyframes puzzle-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Bo'lak joyiga tushganda qisqa yorug' chaqnash. */
+.puzzle-snap {
+  animation: puzzle-snap 0.45s ease-out both;
+}
+@keyframes puzzle-snap {
+  from {
+    stroke-opacity: 1;
+    stroke-width: 4px;
+  }
+  to {
+    stroke-opacity: 0;
+    stroke-width: 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .puzzle-reveal,
+  .puzzle-snap {
+    animation: none;
+  }
+}

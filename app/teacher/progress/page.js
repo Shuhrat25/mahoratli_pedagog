@@ -40,7 +40,8 @@ export default function TeacherProgressPage() {
 
   if (!data) return <div className="text-slate-400">Yuklanmoqda...</div>;
 
-  const totalLessons = data.lessons.length;
+  // Ixtiyoriy darslar (pazl) kursni tugatish shartiga kirmaydi.
+  const totalLessons = data.lessons.filter((l) => !l.optional).length;
   const avgPercent = rows.length ? Math.round(rows.reduce((s, r) => s + r.percent, 0) / rows.length) : 0;
   const finished = rows.filter((r) => totalLessons > 0 && r.doneCount === totalLessons).length;
 

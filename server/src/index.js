@@ -22,6 +22,7 @@ const materialRoutes = require("./routes/materials");
 const forumRoutes = require("./routes/forum");
 const fileRoutes = require("./routes/files");
 const notificationRoutes = require("./routes/notifications");
+const puzzleRoutes = require("./routes/puzzles");
 
 const app = express();
 
@@ -67,6 +68,7 @@ app.use("/api/materials", materialRoutes);
 app.use("/api/forum", forumRoutes);
 app.use("/api/files", fileRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/puzzles", puzzleRoutes);
 
 app.use((req, res) => res.status(404).json({ error: "Topilmadi" }));
 

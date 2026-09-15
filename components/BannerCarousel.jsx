@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fileUrl } from "@/lib/api";
+import { publicFileUrl } from "@/lib/api";
 import RichText from "@/components/RichText";
 
 export default function BannerCarousel({ banners }) {
@@ -31,7 +31,7 @@ export default function BannerCarousel({ banners }) {
       className={`group relative h-[220px] overflow-hidden rounded-3xl bg-cover bg-center text-white shadow-lg shadow-indigo-900/10 sm:h-[260px] ${
         hasImage ? "" : `bg-gradient-to-br ${banner.color}`
       }`}
-      style={{ backgroundImage: hasImage ? `url(${fileUrl(banner.imageId)})` : undefined }}
+      style={{ backgroundImage: hasImage ? `url(${publicFileUrl(banner.imageId)})` : undefined }}
     >
       {hasImage ? (
         // Rasm ustidagi matn har doim o'qilishi uchun qorong'i pardalar

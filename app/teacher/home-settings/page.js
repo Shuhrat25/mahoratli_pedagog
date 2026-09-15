@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { bannersApi, postsApi, pollsApi, fileUrl, ApiError } from "@/lib/api";
+import { bannersApi, postsApi, pollsApi, publicFileUrl, ApiError } from "@/lib/api";
 import Modal from "@/components/Modal";
 import KebabMenu from "@/components/KebabMenu";
 import RichText from "@/components/RichText";
@@ -145,7 +145,7 @@ function BannersTab() {
             className={`card relative flex items-center gap-4 overflow-hidden bg-cover bg-center p-4 text-white ${
               b.imageId ? "" : `bg-gradient-to-br ${b.color}`
             }`}
-            style={b.imageId ? { backgroundImage: `url(${fileUrl(b.imageId)})` } : undefined}
+            style={b.imageId ? { backgroundImage: `url(${publicFileUrl(b.imageId)})` } : undefined}
           >
             {b.imageId && <div className="absolute inset-0 bg-black/40" />}
             <div className="relative min-w-0 flex-1">

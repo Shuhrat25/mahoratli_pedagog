@@ -21,7 +21,8 @@ export default function CertificatePage() {
     topicsApi
       .list()
       .then(({ topics }) => {
-        const lessons = topics.flatMap((t) => t.lessons);
+        // Sertifikat faqat majburiy darslar bo'yicha — pazl ixtiyoriy.
+        const lessons = topics.flatMap((t) => t.lessons).filter((l) => !l.optional);
         const done = lessons.filter((l) => l.done);
         const scores = done.map((l) => l.score).filter((s) => s != null);
         setState({

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { topicsApi, fileUrl, ApiError } from "@/lib/api";
 import Modal from "@/components/Modal";
@@ -10,13 +11,16 @@ import { useToast } from "@/components/ToastProvider";
 import { formatDuration } from "@/lib/formatDuration";
 import { isEmptyHtml } from "@/lib/richText";
 import { Icon, paths } from "@/components/icons";
+import PuzzleImagesField from "@/components/puzzle/PuzzleImagesField";
+import { downscaleImage } from "@/lib/imageResize";
 
-const TYPE_LABEL = { VIDEO: "Video", TEXT: "Matn", TEST: "Test", LIVE: "Jonli dars" };
+const TYPE_LABEL = { VIDEO: "Video", TEXT: "Matn", TEST: "Test", LIVE: "Jonli dars", PUZZLE: "Pazl" };
 const TYPE_BADGE = {
   VIDEO: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
   TEXT: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
   TEST: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
   LIVE: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
+  PUZZLE: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
 };
 
 function toLocalInput(value) {
@@ -47,12 +51,18 @@ export default function TeacherTopicLessonsPage() {
   const [maxAttempts, setMaxAttempts] = useState("");
   const [testFile, setTestFile] = useState(null);
   const [materialFiles, setMaterialFiles] = useState(null);
+  const [puzzlePoints, setPuzzlePoints] = useState("");
+  const [puzzleFiles, setPuzzleFiles] = useState([]);
+  const [puzzleExisting, setPuzzleExisting] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
 
   function reload() {
     return topicsApi.list().then(({ topics }) => {
-      setTopic(topics.find((t) => t.id === topicId) || null);
+      const found = topics.find((t) => t.id === topicId) || null;
+      setTopic(found);
+      return found;
     });
   }
 
@@ -75,6 +85,10 @@ export default function TeacherTopicLessonsPage() {
     setMaxAttempts("");
     setTestFile(null);
     setMaterialFiles(null);
+    setPuzzlePoints("");
+    setPuzzleFiles([]);
+    setPuzzleExisting([]);
+    setUploadProgress(null);
     setFormError("");
   }
 
@@ -98,6 +112,8 @@ export default function TeacherTopicLessonsPage() {
     setTimeLimitMin(lesson.timeLimitSec ? Math.round(lesson.timeLimitSec / 60) : "");
     setShuffle(!!lesson.shuffle);
     setMaxAttempts(lesson.maxAttempts || "");
+    setPuzzlePoints(lesson.puzzlePoints || "");
+    setPuzzleExisting(lesson.puzzleImages || []);
     setOpen(true);
   }
 
@@ -108,14 +124,55 @@ export default function TeacherTopicLessonsPage() {
     return m ? `https://www.youtube.com/embed/${m[1]}` : url;
   }
 
+  // Rasmlar bittadan yuklanadi: jarayon ko'rinib turadi va bitta rasm xato
+  // bersa, oldingilari saqlanib qoladi (qolganlarini qayta yuborish mumkin).
+  async function uploadPuzzleImages(lessonId) {
+    const queue = [...puzzleFiles];
+    setUploadProgress({ done: 0, total: queue.length });
+    for (let i = 0; i < queue.length; i++) {
+      const fd = new FormData();
+      fd.append("images", await downscaleImage(queue[i]));
+      try {
+        const { puzzleImages } = await topicsApi.addPuzzleImages(topicId, lessonId, fd);
+        setPuzzleExisting(puzzleImages);
+        setPuzzleFiles(queue.slice(i + 1));
+        setUploadProgress({ done: i + 1, total: queue.length });
+      } catch (err) {
+        throw new ApiError(`"${queue[i].name}" yuklanmadi: ${err.message}`, err.status);
+      }
+    }
+    setUploadProgress(null);
+  }
+
+  async function removePuzzleImage(image) {
+    const ok = await confirm({
+      title: "Rasm o'chirilsinmi?",
+      description: "Talabalarning shu rasm bo'yicha natijalari ham o'chadi.",
+      confirmLabel: "O'chirish",
+    });
+    if (!ok) return;
+    try {
+      await topicsApi.removePuzzleImage(topicId, editing.id, image.id);
+      setPuzzleExisting((list) => list.filter((img) => img.id !== image.id));
+      reload();
+    } catch (err) {
+      toastError(err.message || "O'chirib bo'lmadi");
+    }
+  }
+
   async function save(e) {
     e.preventDefault();
+    let lessonId = editing?.id;
     if (lessonType === "TEXT" && !editing && isEmptyHtml(content)) {
       setFormError("Dars matnini to'ldiring");
       return;
     }
     if (lessonType === "LIVE" && !meetingUrl.trim()) {
       setFormError("Jonli dars uchun uchrashuv havolasi kerak");
+      return;
+    }
+    if (lessonType === "PUZZLE" && puzzleExisting.length + puzzleFiles.length === 0) {
+      setFormError("Pazl uchun kamida bitta rasm qo'shing");
       return;
     }
 
@@ -143,13 +200,24 @@ export default function TeacherTopicLessonsPage() {
           startsAt: startsAt ? new Date(startsAt).toISOString() : null,
           content,
         };
+      } else if (lessonType === "PUZZLE") {
+        payload = {
+          ...common,
+          type: "PUZZLE",
+          content,
+          // Bo'sh qoldirilsa ball berilmaydi.
+          puzzlePoints: puzzlePoints ? Number(puzzlePoints) : null,
+        };
       } else {
         payload = { ...common, type: "TEST" };
       }
 
-      let lessonId = editing?.id;
       if (editing) await topicsApi.updateLesson(topicId, editing.id, payload);
       else lessonId = (await topicsApi.createLesson(topicId, payload)).lesson.id;
+
+      if (lessonType === "PUZZLE" && puzzleFiles.length > 0) {
+        await uploadPuzzleImages(lessonId);
+      }
 
       if (lessonType === "TEST" && testFile) {
         const fd = new FormData();
@@ -168,6 +236,14 @@ export default function TeacherTopicLessonsPage() {
       success(editing ? "Dars yangilandi" : "Dars yaratildi");
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Xatolik yuz berdi");
+      setUploadProgress(null);
+      // Dars yaratilib, rasmlarning bir qismi yuklanmay qolgan bo'lsa — forma
+      // tahrirlash rejimiga o'tadi, qayta "Saqlash" dublikat dars yaratmaydi.
+      if (!editing && lessonId) {
+        const fresh = await reload().catch(() => null);
+        const created = fresh?.lessons.find((l) => l.id === lessonId);
+        if (created) setEditing(created);
+      }
     } finally {
       setSaving(false);
     }
@@ -246,6 +322,19 @@ export default function TeacherTopicLessonsPage() {
                   {lesson.type === "LIVE" && lesson.startsAt && (
                     <span>{new Date(lesson.startsAt).toLocaleString("uz-UZ")}</span>
                   )}
+                  {lesson.type === "PUZZLE" && (
+                    <>
+                      <span>{lesson.puzzleImages?.length || 0} rasm</span>
+                      <span>· {lesson.puzzlePoints ? `${lesson.puzzlePoints} ball` : "ballsiz"}</span>
+                      <span>· ixtiyoriy</span>
+                      <Link
+                        href={`/teacher/lessons/${topicId}/puzzle/${lesson.id}`}
+                        className="font-medium text-brand-600 hover:underline dark:text-brand-400"
+                      >
+                        Sinab ko&apos;rish
+                      </Link>
+                    </>
+                  )}
                 </div>
               </div>
               <KebabMenu onEdit={() => openEdit(lesson)} onDelete={() => remove(lesson)} />
@@ -290,6 +379,7 @@ export default function TeacherTopicLessonsPage() {
               <option value="TEXT">Matn</option>
               <option value="TEST">Test</option>
               <option value="LIVE">Jonli dars (Zoom / Google Meet)</option>
+              <option value="PUZZLE">Pazl (rasmdan yig&apos;iladigan o&apos;yin)</option>
             </select>
           </div>
 
@@ -351,6 +441,49 @@ export default function TeacherTopicLessonsPage() {
                   placeholder="Nimalarni tayyorlab kelish kerak, dars rejasi..."
                   ariaLabel="Jonli dars tavsifi"
                   minHeight={160}
+                />
+              </div>
+            </div>
+          )}
+
+          {lessonType === "PUZZLE" && (
+            <div className="space-y-3">
+              <div>
+                <label className="label">Pazl rasmlari</label>
+                <PuzzleImagesField
+                  existing={puzzleExisting}
+                  onRemoveExisting={removePuzzleImage}
+                  files={puzzleFiles}
+                  onFilesChange={setPuzzleFiles}
+                  progress={uploadProgress}
+                  disabled={saving}
+                />
+              </div>
+              <div>
+                <label className="label">Ball (ixtiyoriy)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={puzzlePoints}
+                  onChange={(e) => setPuzzlePoints(e.target.value)}
+                  className="input sm:w-48"
+                  placeholder="ball berilmaydi"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Talaba har bir rasmni birinchi marta yig&apos;ganda shuncha ball oladi. Bo&apos;sh qoldirilsa ball
+                  berilmaydi. Murakkablik darajasini talaba o&apos;zi tanlaydi; pazl ixtiyoriy — keyingi darsni
+                  to&apos;smaydi.
+                </p>
+              </div>
+              <div>
+                <label className="label">Topshiriq matni (ixtiyoriy)</label>
+                <RichTextEditor
+                  value={content}
+                  onChange={setContent}
+                  placeholder="Masalan: rasmni yig'ing va unda nima tasvirlanganini forumda yozing..."
+                  ariaLabel="Pazl darsi tavsifi"
+                  minHeight={120}
                 />
               </div>
             </div>

@@ -38,6 +38,7 @@ model User {
   uploadedFiles  UploadedFile[]
   notifications  Notification[]
   dailyActivity  DailyActivity[]
+  puzzleProgress PuzzleProgress[]
 }
 
 model EmailVerification {
@@ -139,7 +140,7 @@ model Topic {
   lessons Lesson[]
 }
 
-// type: VIDEO | TEXT | TEST | LIVE
+// type: VIDEO | TEXT | TEST | LIVE | PUZZLE
 // LIVE — jonli dars: tashqi uchrashuv havolasi (Zoom/Meet) va boshlanish vaqti.
 model Lesson {
   id           String           @id @default(cuid())
@@ -158,8 +159,12 @@ model Lesson {
   timeLimitSec Int?
   shuffle      Boolean          @default(false)
   maxAttempts  Int?
+  // PUZZLE: har bir rasm birinchi marta yig'ilganda beriladigan ball.
+  // null — ball berilmaydi.
+  puzzlePoints Int?
   questions    Question[]
   materials    LessonMaterial[]
+  puzzleImages PuzzleImage[]
   progress     LessonProgress[]
 }
 
@@ -191,17 +196,17 @@ model QuestionOption {
 }
 
 model LessonProgress {
-  id          String    @id @default(cuid())
-  lessonId    String
-  lesson      Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  userId      String
-  user        User      @relation(fields: [userId], references: [id])
-  completed   Boolean   @default(false)
-  score       Int?
-  attempts    Int       @default(0)
+  id            String    @id @default(cuid())
+  lessonId      String
+  lesson        Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  completed     Boolean   @default(false)
+  score         Int?
+  attempts      Int       @default(0)
   // Dars testining joriy urinishi qachon boshlangani (vaqt hisobi serverda).
   testStartedAt DateTime?
-  completedAt DateTime?
+  completedAt   DateTime?
 
   @@unique([lessonId, userId])
 }
@@ -211,21 +216,21 @@ model LessonProgress {
 // savollarga javob beradi, ball avtomatik hisoblanadi — darslardagi TEST
 // darsi bilan bir xil mantiq, lekin alohida vazifa sifatida).
 model Assignment {
-  id          String               @id @default(cuid())
-  title       String
-  description String
-  type        String               @default("FILE")
-  maxScore    Int
-  dueDate     DateTime
-  createdAt   DateTime             @default(now())
+  id           String               @id @default(cuid())
+  title        String
+  description  String
+  type         String               @default("FILE")
+  maxScore     Int
+  dueDate      DateTime
+  createdAt    DateTime             @default(now())
   // TEST turidagi vazifa sozlamalari. Ikkalasi ham null bo'lsa — vaqt
   // cheklanmagan va urinishlar soni cheksiz.
   timeLimitSec Int?
   maxAttempts  Int?
-  steps       AssignmentStep[]
-  materials   AssignmentMaterial[]
-  questions   AssignmentQuestion[]
-  submissions Submission[]
+  steps        AssignmentStep[]
+  materials    AssignmentMaterial[]
+  questions    AssignmentQuestion[]
+  submissions  Submission[]
 }
 
 model AssignmentQuestion {
@@ -264,28 +269,28 @@ model AssignmentMaterial {
 }
 
 model Submission {
-  id           String        @id @default(cuid())
-  assignmentId String
-  assignment   Assignment    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  studentId    String
-  student      User          @relation(fields: [studentId], references: [id])
+  id            String           @id @default(cuid())
+  assignmentId  String
+  assignment    Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       User             @relation(fields: [studentId], references: [id])
   // TEST turidagi vazifada fayl bo'lmaydi — ball avtomatik hisoblanadi.
-  fileId       String?
-  file         UploadedFile? @relation(fields: [fileId], references: [id])
-  submittedAt  DateTime      @default(now())
+  fileId        String?
+  file          UploadedFile?    @relation(fields: [fileId], references: [id])
+  submittedAt   DateTime         @default(now())
   // Talabaning ishga qo'shimcha izohi (ixtiyoriy).
-  text         String?
+  text          String?
   // TEST turidagi vazifada nechanchi urinish ekani.
-  attempts     Int           @default(0)
+  attempts      Int              @default(0)
   // Joriy urinish qachon boshlangani. Vaqt hisobi SERVERDA yuritiladi —
   // aks holda talaba sahifani yangilab, taymerni qaytadan boshlashi mumkin edi.
   testStartedAt DateTime?
-  score        Int?
-  comment      String?
-  status       String        @default("NOT_REVIEWED")
+  score         Int?
+  comment       String?
+  status        String           @default("NOT_REVIEWED")
   // Bir nechta fayl. `fileId` birinchi faylga ishora qilib qoladi — eski
   // yozuvlar va fayl ruxsatlarini tekshirish shunga tayanadi.
-  files        SubmissionFile[]
+  files         SubmissionFile[]
 
   @@unique([assignmentId, studentId])
 }
@@ -335,6 +340,7 @@ model UploadedFile {
   assignmentMaterials AssignmentMaterial[]
   lessonMaterials     LessonMaterial[]
   submissionFiles     SubmissionFile[]
+  puzzleImages        PuzzleImage[]
   submissions         Submission[]
   materials           Material[]
   banners             Banner[]
@@ -382,4 +388,36 @@ model SubmissionFile {
   order        Int          @default(0)
 
   @@index([submissionId])
+}
+
+// Pazl darsi rasmlari. Bitta darsga cheklanmagan miqdorda rasm qo'shiladi,
+// talaba ulardan birini va murakkablik darajasini o'zi tanlaydi.
+model PuzzleImage {
+  id        String           @id @default(cuid())
+  lessonId  String
+  lesson    Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  fileId    String
+  file      UploadedFile     @relation(fields: [fileId], references: [id])
+  order     Int              @default(0)
+  createdAt DateTime         @default(now())
+  progress  PuzzleProgress[]
+
+  @@index([lessonId])
+}
+
+// Talabaning har bir rasm + daraja bo'yicha natijasi. Yig'ish vaqti serverda
+// hisoblanadi (startedAt dan), eng yaxshi vaqt saqlanadi.
+model PuzzleProgress {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  puzzleImageId String
+  puzzleImage   PuzzleImage @relation(fields: [puzzleImageId], references: [id], onDelete: Cascade)
+  difficulty    String
+  startedAt     DateTime?
+  bestTimeSec   Int?
+  solvedCount   Int         @default(0)
+  lastSolvedAt  DateTime?
+
+  @@unique([userId, puzzleImageId, difficulty])
 }

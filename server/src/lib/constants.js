@@ -1,5 +1,12 @@
 const ROLES = ["STUDENT", "ADMIN", "TEACHER"];
-const LESSON_TYPES = ["VIDEO", "TEXT", "TEST", "LIVE"];
+const LESSON_TYPES = ["VIDEO", "TEXT", "TEST", "LIVE", "PUZZLE"];
+// Ixtiyoriy darslar keyingi darsni qulflamaydi va umumiy foizga kirmaydi.
+const OPTIONAL_LESSON_TYPES = ["PUZZLE"];
+
+// Pazl murakkabligini TALABA o'zi tanlaydi. Qiymat — taxminiy bo'laklar soni
+// (aniq to'r rasm tomonlari nisbatiga qarab tanlanadi). Frontenddagi
+// lib/jigsaw.js dagi ro'yxat bilan bir xil bo'lishi kerak (test tekshiradi).
+const PUZZLE_DIFFICULTIES = { EASY: 12, MEDIUM: 24, HARD: 48, EXPERT: 80 };
 const SUBMISSION_STATUSES = ["NOT_REVIEWED", "REVIEWED"];
 const VERIFICATION_PURPOSES = ["REGISTER", "RESET"];
 const POST_STATUSES = ["DRAFT", "PUBLISHED"];
@@ -46,6 +53,8 @@ function validatePassword(password) {
 module.exports = {
   ROLES,
   LESSON_TYPES,
+  OPTIONAL_LESSON_TYPES,
+  PUZZLE_DIFFICULTIES,
   SUBMISSION_STATUSES,
   VERIFICATION_PURPOSES,
   POST_STATUSES,
