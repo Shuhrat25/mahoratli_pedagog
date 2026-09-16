@@ -18,11 +18,16 @@ The app's interface is in Uzbek (Latin script), built around a national-values c
 - Home feed: banners (optionally with a background image), teacher posts (like/comment),
   and live-updating polls
 - Home feed with search, tag filtering and pagination
-- Lessons: topics → lessons (video / text / test / **live**), unlocked sequentially —
+- Lessons: topics → lessons (video / text / test / **live** / **puzzle**), unlocked sequentially —
   **enforced server-side**, not just hidden in the UI. A test lesson only unlocks the next
   one once its pass mark is reached
 - Live lessons: an external meeting link (Zoom / Meet) with a start time; the join button
   opens 15 minutes beforehand and every student gets a notification when one is scheduled
+- Jigsaw puzzle lessons: pick one of the teacher's photos and a difficulty (Oson ~12,
+  O'rta ~24, Qiyin ~48, Mutaxassis ~80 pieces), then drag real jigsaw-shaped pieces into
+  the frame with a mouse or finger. Best time per photo and difficulty is kept, and it works
+  on phones (the frame sits above the pieces). Puzzles are **optional** — they never block
+  the next lesson and don't count towards completion or the certificate
 - Downloadable per-lesson attachments (slides, PDFs, worksheets)
 - Optional test timer, shuffled questions and attempt limits — on **lessons and
   assignments alike**. Leaving a field empty means no limit: unlimited time, unlimited
@@ -55,6 +60,9 @@ The app's interface is in Uzbek (Latin script), built around a national-values c
   "several answers allowed" on, several options can be marked correct (the picker switches
   from radio buttons to checkboxes)
 - Lessons/topics management with drag-style reordering and the DOCX/PDF test importer
+- Puzzle lessons: upload as many photos per lesson as needed (drag & drop, resized to
+  1600 px in the browser before upload), optional points per photo (empty = no points),
+  and a "Sinab ko'rish" preview that plays the puzzle exactly as students see it
 - **Rich text everywhere the teacher writes** — a dependency-free WYSIWYG editor
   (headings, lists, quotes, code blocks, colours/highlight, alignment, links, inline
   images, fullscreen) on banners, posts, lesson content, assignment descriptions,
@@ -264,6 +272,24 @@ be resumed later. If nothing was submitted at all, the attempt is recorded as 0.
 A test with no time limit has no end time, no countdown and no expiry — exactly the
 "solve it freely" case.
 
+## Puzzle lessons
+
+- **Shapes** — `lib/jigsaw.js` builds every inner edge once as three cubic Béziers with a
+  little random jitter; the two neighbouring pieces use the *same* points (one reversed),
+  so they fit exactly. Border edges are straight. The grid is chosen per photo so pieces
+  stay close to square (`gridFor`).
+- **Board** — one SVG; each piece is the photo clipped by its outline. While dragging,
+  only that piece's `transform` attribute is updated (no React re-render), so 80 pieces
+  stay smooth. A piece dropped within 30% of its size from its cell snaps in and locks.
+- **Unlocking** — `PUZZLE` is an *optional* lesson type (`OPTIONAL_LESSON_TYPES`). It opens
+  like any lesson once the previous required lesson is done, but it never locks what
+  follows, and topic completion, progress % and the certificate only count required lessons.
+- **Scoring** — `POST /api/puzzles/:imageId/start` records the start time;
+  `/solve` computes the time on the server, refuses impossibly fast results (0.4 s per
+  piece, at least 5 s), counts each start once, and awards the lesson's points only the
+  **first** time a student completes a given photo (at any difficulty). Teachers and admins
+  can play but never receive points or lesson progress.
+
 ## Uploads, rate limiting and other guardrails
 
 - **Upload size**: students are capped at **10 MB** *per file* — a submission can carry up
@@ -290,7 +316,8 @@ npm test
 
 Runs on the built-in Node test runner (no test framework dependency). Covers the HTML
 sanitiser against an XSS attack corpus — **both** the server and the browser
-implementation, asserting they agree — the lesson-unlocking rules, the test-markup parser,
+implementation, asserting they agree — the lesson-unlocking rules (including optional puzzle lessons), puzzle geometry (shared edges
+match exactly, difficulty lists agree between server and browser), the test-markup parser,
 CSV escaping, password rules, Prisma error mapping and the rate limiter.
 
 ## Known limitations

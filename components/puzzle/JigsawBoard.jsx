@@ -218,7 +218,11 @@ export default function JigsawBoard({
     if (!point) return;
 
     e.preventDefault();
-    svgRef.current.setPointerCapture?.(e.pointerId);
+    try {
+      svgRef.current.setPointerCapture(e.pointerId);
+    } catch {
+      // ko'rsatkich allaqachon qo'yib yuborilgan — sudrash baribir SVG ichida ishlaydi
+    }
     const pos = positions.current[i];
     drag.current = { i, pointerId: e.pointerId, dx: point.x - pos.x, dy: point.y - pos.y };
     pieceEl.setAttribute("filter", `url(#${uid}-lift)`);
@@ -303,7 +307,7 @@ export default function JigsawBoard({
           </svg>
           Rasmlar
         </button>
-        <div className="min-w-0 flex-1 truncate text-sm">
+        <div className="min-w-[9rem] flex-1 truncate text-sm">
           <span className="font-semibold">{title}</span>
           <span className="text-slate-500">
             {" "}
