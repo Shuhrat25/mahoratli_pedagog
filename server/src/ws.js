@@ -1,3 +1,4 @@
+const prisma = require("./db");
 const { WebSocketServer } = require("ws");
 const { verifyToken, COOKIE_NAME } = require("./lib/jwt");
 const { markOnline, markOffline, touch } = require("./lib/presence");
@@ -49,20 +50,39 @@ function sendToUser(userId, payload) {
 const HEARTBEAT_MS = 30 * 1000;
 
 function attachWebSocketServer(httpServer) {
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 1024 });
 
-  wss.on("connection", (ws, req) => {
+  wss.on("connection", async (ws, req) => {
+    const origin = req.headers.origin;
+    const allowedOrigins = (process.env.CLIENT_ORIGIN || "")
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean);
+
+    // CSWSH himoyasi: faqat ruxsat etilgan Origin qabul qilinadi
+    if (origin && !allowedOrigins.includes(origin)) {
+      ws.close(4003, "Ruxsat etilmagan Origin");
+      return;
+    }
+
     const token = extractToken(req);
     let userId = null;
 
     try {
       const payload = verifyToken(token);
       userId = payload.sub;
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user || user.tokenVersion !== payload.tv) {
+        ws.close(4001, "Yaroqsiz token");
+        return;
+      }
     } catch {
       ws.close(4001, "Yaroqsiz token");
       return;
     }
 
+    ws.sessionToken = token;
+    ws.userId = userId;
     ws.isAlive = true;
     markOnline(userId);
     addSocket(userId, ws);
@@ -94,7 +114,14 @@ function attachWebSocketServer(httpServer) {
   // mumkin — shuning uchun javob bermayotganlarini o'zimiz uzamiz, aks holda
   // ular abadiy "onlayn" bo'lib qolardi.
   const heartbeat = setInterval(() => {
-    wss.clients.forEach((ws) => {
+    wss.clients.forEach(async (ws) => {
+      if (ws.sessionToken) {
+        try {
+          const payload = verifyToken(ws.sessionToken);
+          const user = await prisma.user.findUnique({ where: { id: ws.userId }, select: { tokenVersion: true } });
+          if (!user || user.tokenVersion !== payload.tv) return ws.close(4001, "Session revoked");
+        } catch { return ws.close(4001, "Session expired"); }
+      }
       if (ws.isAlive === false) return ws.terminate();
       ws.isAlive = false;
       try {
@@ -110,4 +137,8 @@ function attachWebSocketServer(httpServer) {
   return wss;
 }
 
-module.exports = { attachWebSocketServer, sendToUser };
+function disconnectUser(userId) {
+  const set = sockets.get(userId);
+  if (set) for (const ws of set) ws.close(4001, "Session revoked");
+}
+module.exports = { attachWebSocketServer, sendToUser, disconnectUser };

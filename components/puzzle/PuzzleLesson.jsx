@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { puzzlesApi, fileUrl } from "@/lib/api";
 import { DIFFICULTIES, formatSolveTime } from "@/lib/jigsaw";
 import RichText from "@/components/RichText";
@@ -25,6 +25,8 @@ function readStoredDifficulty() {
  * to'smaydi.
  */
 export default function PuzzleLesson({ lesson, onProgress }) {
+  const session = useRef(null);
+  const placements = useRef(Promise.resolve());
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState("");
   const [selectedId, setSelectedId] = useState(null);
@@ -92,17 +94,25 @@ export default function PuzzleLesson({ lesson, onProgress }) {
         pieces={level.pieces}
         title={`${index + 1}-rasm`}
         difficultyLabel={level.label}
-        onReady={() => {
-          puzzlesApi.start(game.image.id, game.difficulty).catch((err) => setResultError(err.message));
+        onReady={async ({ aspect }) => {
+          placements.current = Promise.resolve();
+          const started = await puzzlesApi.start(game.image.id, game.difficulty, aspect);
+          session.current = started.session;
         }}
-        onComplete={() => {
-          puzzlesApi
-            .solve(game.image.id, game.difficulty)
-            .then((r) => {
-              setResult(r);
-              onProgress?.();
-            })
-            .catch((err) => setResultError(err.message || "Natijani saqlab bo'lmadi"));
+        onPlace={({ index, x, y }) => {
+          const current = session.current;
+          placements.current = placements.current.then(() => puzzlesApi.place(game.image.id, {
+            difficulty: game.difficulty, sessionId: current.id, pieceId: current.pieces[index], x, y,
+          }));
+          placements.current.catch((err) => setResultError(err.message));
+        }}
+        onComplete={async () => {
+          try {
+            await placements.current;
+            const r = await puzzlesApi.solve(game.image.id, game.difficulty, session.current.id);
+            setResult(r);
+            onProgress?.();
+          } catch (err) { setResultError(err.message || "Natijani saqlab bo'lmadi"); }
         }}
         result={result}
         resultError={resultError}

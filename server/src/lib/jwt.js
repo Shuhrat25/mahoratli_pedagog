@@ -5,11 +5,13 @@ const COOKIE_NAME = "mp_token";
 const EXPIRES_IN = "7d";
 
 function signToken(user) {
-  return jwt.sign({ sub: user.id, role: user.role }, SECRET, { expiresIn: EXPIRES_IN });
+  return jwt.sign({ sub: user.id, role: user.role, tv: user.tokenVersion ?? 0 }, SECRET, { expiresIn: EXPIRES_IN });
 }
 
 function verifyToken(token) {
-  return jwt.verify(token, SECRET);
+  const payload = jwt.verify(token, SECRET, { algorithms: ["HS256"] });
+  if (typeof payload.sub !== "string" || !Number.isInteger(payload.tv) || payload.type) throw new Error("Invalid session");
+  return payload;
 }
 
 // Lokal devda frontend/backend bir xil "site" hisoblanadi (ikkalasi ham
@@ -35,13 +37,13 @@ function clearAuthCookie(res) {
   res.clearCookie(COOKIE_NAME, cookieOptions());
 }
 
-function signVerifiedEmailToken(email, purpose) {
-  return jwt.sign({ email, purpose, type: "email-verified" }, SECRET, { expiresIn: "15m" });
+function signVerifiedEmailToken(email, purpose, verificationId) {
+  return jwt.sign({ email, purpose, verificationId, type: "email-verified" }, SECRET, { expiresIn: "15m" });
 }
 
 function verifyVerifiedEmailToken(token, purpose) {
-  const payload = jwt.verify(token, SECRET);
-  if (payload.type !== "email-verified" || payload.purpose !== purpose) {
+  const payload = jwt.verify(token, SECRET, { algorithms: ["HS256"] });
+  if (payload.type !== "email-verified" || payload.purpose !== purpose || typeof payload.verificationId !== "string") {
     throw new Error("Yaroqsiz tasdiqlash tokeni");
   }
   return payload;

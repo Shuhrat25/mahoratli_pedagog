@@ -6,6 +6,8 @@ const { findLockedLesson } = require("../lib/lessonLookup");
 const { PUZZLE_DIFFICULTIES } = require("../lib/constants");
 const { minSolveSeconds } = require("../lib/puzzleRules");
 
+const { userTransaction, auditGrade } = require('../lib/securityTransaction');
+const { createSession, placePiece, requireSolved } = require('../lib/puzzleSession');
 const router = express.Router();
 
 function isStaff(user) {
@@ -79,16 +81,30 @@ router.post(
     const difficulty = parseDifficulty(req.body?.difficulty);
     const image = await loadImageForUser(req.user, req.params.imageId);
     const startedAt = new Date();
-    await prisma.puzzleProgress.upsert({
+    const session = createSession(difficulty, req.body.aspect);
+    await userTransaction(req.user.id, (tx) => tx.puzzleProgress.upsert({
       where: {
         userId_puzzleImageId_difficulty: { userId: req.user.id, puzzleImageId: image.id, difficulty },
       },
-      update: { startedAt },
-      create: { userId: req.user.id, puzzleImageId: image.id, difficulty, startedAt },
-    });
-    res.json({ startedAt });
+      update: { startedAt, session },
+      create: { userId: req.user.id, puzzleImageId: image.id, difficulty, startedAt, session },
+    }));
+    res.json({ startedAt, session });
   })
 );
+
+router.post('/:imageId/place', requireAuth, route(async (req, res) => {
+ const difficulty = parseDifficulty(req.body?.difficulty);
+ const session = await userTransaction(req.user.id, async (tx) => {
+   const where = { userId_puzzleImageId_difficulty: { userId: req.user.id, puzzleImageId: req.params.imageId, difficulty } };
+   const progress = await tx.puzzleProgress.findUnique({ where });
+   if (!progress?.startedAt) throw new HttpError(409, "Avval pazlni boshlang");
+   const session = placePiece(progress.session, req.body);
+   await tx.puzzleProgress.update({ where, data: { session } });
+   return session;
+ });
+ res.json({ placedCount: session.placed.length });
+}));
 
 router.post(
   "/:imageId/solve",
@@ -98,59 +114,66 @@ router.post(
     const image = await loadImageForUser(req.user, req.params.imageId);
     const key = { userId: req.user.id, puzzleImageId: image.id, difficulty };
 
-    const progress = await prisma.puzzleProgress.findUnique({ where: { userId_puzzleImageId_difficulty: key } });
-    if (!progress?.startedAt) throw new HttpError(400, "Avval pazlni boshlang");
+    const result = await userTransaction(req.user.id, async (tx) => {
+      const progress = await tx.puzzleProgress.findUnique({ where: { userId_puzzleImageId_difficulty: key } });
+      if (!progress?.startedAt) throw new HttpError(400, "Avval pazlni boshlang");
+      requireSolved(progress.session, req.body.sessionId);
 
-    const now = new Date();
-    const timeSec = Math.max(1, Math.round((now.getTime() - progress.startedAt.getTime()) / 1000));
-    if (timeSec < minSolveSeconds(difficulty)) {
-      throw new HttpError(400, "Pazl juda tez yig'ildi — natija qabul qilinmadi");
-    }
-
-    // Rasm avval (istalgan darajada) yig'ilganmi — ball faqat birinchi marta.
-    const solvedBefore = await prisma.puzzleProgress.count({
-      where: { userId: req.user.id, puzzleImageId: image.id, solvedCount: { gt: 0 } },
-    });
-
-    // startedAt bo'yicha shartli yangilash: bitta boshlanish ikki marta
-    // hisoblanmaydi (tugma ikki marta bosilsa yoki so'rov takrorlansa).
-    const isNewBest = progress.bestTimeSec == null || timeSec < progress.bestTimeSec;
-    const claimed = await prisma.puzzleProgress.updateMany({
-      where: { id: progress.id, startedAt: progress.startedAt },
-      data: {
-        startedAt: null,
-        solvedCount: { increment: 1 },
-        lastSolvedAt: now,
-        ...(isNewBest ? { bestTimeSec: timeSec } : {}),
-      },
-    });
-    if (claimed.count === 0) throw new HttpError(409, "Bu natija allaqachon qabul qilingan");
-
-    let pointsAwarded = 0;
-    if (!isStaff(req.user)) {
-      if (solvedBefore === 0 && image.lesson.puzzlePoints > 0) {
-        pointsAwarded = image.lesson.puzzlePoints;
-        await prisma.user.update({ where: { id: req.user.id }, data: { points: { increment: pointsAwarded } } });
+      const now = new Date();
+      const timeSec = Math.max(1, Math.round((now.getTime() - progress.startedAt.getTime()) / 1000));
+      if (timeSec < minSolveSeconds(difficulty)) {
+        throw new HttpError(400, "Pazl juda tez yig'ildi — natija qabul qilinmadi");
       }
-      // Pazl ixtiyoriy, lekin yig'ilgan bo'lsa dars ro'yxatida belgilanadi.
-      await prisma.lessonProgress.upsert({
-        where: { lessonId_userId: { lessonId: image.lessonId, userId: req.user.id } },
-        update: { completed: true },
-        create: { lessonId: image.lessonId, userId: req.user.id, completed: true, completedAt: now },
-      });
-      await prisma.lessonProgress.updateMany({
-        where: { lessonId: image.lessonId, userId: req.user.id, completedAt: null },
-        data: { completedAt: now },
-      });
-    }
 
-    res.json({
-      timeSec,
-      bestTimeSec: isNewBest ? timeSec : progress.bestTimeSec,
-      isNewBest,
-      solvedCount: progress.solvedCount + 1,
-      pointsAwarded,
+      // Rasm avval (istalgan darajada) yig'ilganmi — ball faqat birinchi marta.
+      const solvedBefore = await tx.puzzleProgress.count({
+        where: { userId: req.user.id, puzzleImageId: image.id, solvedCount: { gt: 0 } },
+      });
+
+      // startedAt bo'yicha shartli yangilash: bitta boshlanish ikki marta
+      // hisoblanmaydi (tugma ikki marta bosilsa yoki so'rov takrorlansa).
+      const isNewBest = progress.bestTimeSec == null || timeSec < progress.bestTimeSec;
+      const claimed = await tx.puzzleProgress.updateMany({
+        where: { id: progress.id, startedAt: progress.startedAt },
+        data: {
+          startedAt: null,
+          session: require("@prisma/client").Prisma.DbNull,
+          solvedCount: { increment: 1 },
+          lastSolvedAt: now,
+          ...(isNewBest ? { bestTimeSec: timeSec } : {}),
+        },
+      });
+      if (claimed.count === 0) throw new HttpError(409, "Bu natija allaqachon qabul qilingan");
+
+      let pointsAwarded = 0;
+      if (!isStaff(req.user)) {
+        if (solvedBefore === 0 && image.lesson.puzzlePoints > 0) {
+          pointsAwarded = image.lesson.puzzlePoints;
+          await tx.user.update({ where: { id: req.user.id }, data: { points: { increment: pointsAwarded } } });
+          await auditGrade(tx, req.user.id, req.user.id, image.id, "PUZZLE_REWARD", { points: 0 }, { points: pointsAwarded });
+        }
+        // Pazl ixtiyoriy, lekin yig'ilgan bo'lsa dars ro'yxatida belgilanadi.
+        await tx.lessonProgress.upsert({
+          where: { lessonId_userId: { lessonId: image.lessonId, userId: req.user.id } },
+          update: { completed: true },
+          create: { lessonId: image.lessonId, userId: req.user.id, completed: true, completedAt: now },
+        });
+        await tx.lessonProgress.updateMany({
+          where: { lessonId: image.lessonId, userId: req.user.id, completedAt: null },
+          data: { completedAt: now },
+        });
+      }
+
+      return {
+        timeSec,
+        bestTimeSec: isNewBest ? timeSec : progress.bestTimeSec,
+        isNewBest,
+        solvedCount: progress.solvedCount + 1,
+        pointsAwarded,
+      };
     });
+
+    res.json(result);
   })
 );
 

@@ -7,7 +7,9 @@ async function attachUser(req, res, next) {
   try {
     const payload = verifyToken(token);
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-    if (user) req.user = user;
+    if (user && user.tokenVersion === payload.tv) {
+      req.user = user;
+    }
   } catch {
     // token invalid/expired — treat as guest
   }

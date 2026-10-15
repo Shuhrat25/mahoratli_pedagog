@@ -11,6 +11,8 @@ const { toCsv } = require("../lib/csv");
 const { notify, notifyAllStudents, notifyStaff, TYPES } = require("../lib/notifications");
 const { isWindowOpen, isExpired, endsAt } = require("../lib/testWindow");
 
+const { userTransaction, auditGrade } = require('../lib/securityTransaction');
+const { requireStartedAttempt } = require('../lib/testAttempt');
 const router = express.Router();
 
 const detailInclude = {
@@ -54,7 +56,8 @@ function shapeAssignment(a, user) {
     materials: a.materials.map((m) => ({ id: m.id, name: m.file.originalName, fileId: m.file.id })),
     // Talabaga to'g'ri javob ko'rsatilmaydi — darslardagi TEST bilan bir xil
     // mantiq (topics.js#shapeLessonForStudent'ga qarang).
-    questions: a.questions.map((q) => ({
+    questionCount: a.questions.length,
+    questions: (isStaff || isWindowOpen(mySubmission?.testStartedAt, a.timeLimitSec) ? a.questions : []).map((q) => ({
       id: q.id,
       text: q.text,
       multiple: q.options.filter((o) => o.correct).length > 1,
@@ -175,6 +178,20 @@ router.get(
     res.send(toCsv([header, ...rows]));
   })
 );
+
+router.get('/audit', requireRole('ADMIN', 'TEACHER'), route(async (req, res) => {
+ const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+ const submissionIds = req.query.assignmentId ? (await prisma.submission.findMany({ where: { assignmentId: String(req.query.assignmentId) }, select: { id: true } })).map((s) => s.id) : [];
+ const entries = await prisma.gradeAudit.findMany({ where: {
+   ...(req.query.assignmentId ? { targetId: { in: [String(req.query.assignmentId), ...submissionIds] } } : {}),
+   ...(req.query.studentId ? { studentId: String(req.query.studentId) } : {}),
+   ...(req.query.targetId ? { targetId: String(req.query.targetId) } : {}),
+ }, orderBy: { createdAt: 'desc' }, take: limit });
+ const ids = [...new Set(entries.flatMap((entry) => [entry.actorId, entry.studentId]))];
+ const people = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, firstName: true, lastName: true } });
+ const names = new Map(people.map((person) => [person.id, person.firstName + ' ' + person.lastName]));
+ res.json({ entries: entries.map((entry) => ({ ...entry, actorName: names.get(entry.actorId) || entry.actorId, studentName: names.get(entry.studentId) || entry.studentId, before: JSON.parse(entry.before), after: JSON.parse(entry.after) })) });
+}));
 
 router.get(
   "/:id",
@@ -311,7 +328,8 @@ router.post(
   "/:id/start-test",
   requireRole("STUDENT"),
   route(async (req, res) => {
-    const assignment = await prisma.assignment.findUnique({ where: { id: req.params.id } });
+    const started = await userTransaction(req.user.id, async (prisma) => {
+    const assignment = await prisma.assignment.findUnique({ where: { id: req.params.id }, include: { questions: { include: { options: true }, orderBy: { order: "asc" } } } });
     if (!assignment) throw new HttpError(404, "Vazifa topilmadi");
     if (assignment.type !== "TEST") throw new HttpError(400, "Bu vazifa TEST turida emas");
     if (new Date(assignment.dueDate) < new Date()) throw new HttpError(403, "Vazifa muddati yopilgan");
@@ -322,9 +340,7 @@ router.post(
     // Oldingi urinish boshlangan, lekin yakunlanmagan va vaqti tugagan bo'lsa —
     // u yo'qolgan urinish sifatida yopiladi (aks holda vaqt tugagach sahifani
     // yangilab, yangi oynani cheksiz ochish mumkin bo'lardi).
-    const startedNotSubmitted =
-      submission?.testStartedAt &&
-      (!submission.submittedAt || submission.submittedAt <= submission.testStartedAt);
+    const startedNotSubmitted = !!submission?.testStartedAt;
     if (startedNotSubmitted && !isWindowOpen(submission.testStartedAt, assignment.timeLimitSec)) {
       submission = await prisma.submission.update({
         where,
@@ -343,7 +359,7 @@ router.post(
     // Ochiq oyna bo'lmasa — yangi urinish; urinishlar tugagan bo'lsa ruxsat yo'q.
     if (!windowOpen) {
       if (assignment.maxAttempts && used >= assignment.maxAttempts) {
-        throw new HttpError(403, `Urinishlar tugadi (${assignment.maxAttempts} tadan ${used} ta ishlatilgan)`);
+        return { exhausted: true };
       }
       submission = await prisma.submission.upsert({
         where,
@@ -352,13 +368,17 @@ router.post(
       });
     }
 
-    res.json({
+    return {
+      questions: shapeAssignment({ ...assignment, materials: [], steps: [], submissions: [submission] }, req.user).questions,
       startedAt: submission.testStartedAt,
       endsAt: endsAt(submission.testStartedAt, assignment.timeLimitSec),
       timeLimitSec: assignment.timeLimitSec,
       attempts: submission.attempts || 0,
       maxAttempts: assignment.maxAttempts,
+    };
     });
+    if (started.exhausted) return res.status(403).json({ error: "Urinishlar tugadi" });
+    res.json(started);
   })
 );
 
@@ -375,53 +395,62 @@ router.post(
     if (assignment.type !== "TEST") throw new HttpError(400, "Bu vazifa TEST turida emas");
     if (new Date(assignment.dueDate) < new Date()) throw new HttpError(403, "Vazifa muddati yopilgan");
 
-    const existing = await prisma.submission.findUnique({
-      where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
-    });
-    const usedAttempts = existing?.attempts || 0;
-    if (assignment.maxAttempts && usedAttempts >= assignment.maxAttempts) {
-      throw new HttpError(
-        403,
-        `Urinishlar tugadi (${assignment.maxAttempts} tadan ${usedAttempts} ta ishlatilgan)`
-      );
-    }
-
-    // Vaqti tugagan javob qabul qilinmaydi — urinish esa sarflangan hisoblanadi.
-    if (assignment.timeLimitSec && isExpired(existing?.testStartedAt, assignment.timeLimitSec)) {
-      await prisma.submission.update({
-        where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
-        data: {
-          attempts: usedAttempts + 1,
-          testStartedAt: null,
-          ...(existing.score == null ? { score: 0, status: "REVIEWED", submittedAt: new Date() } : {}),
-        },
-      });
-      throw new HttpError(403, "Test vaqti tugagan");
-    }
-
     let correctCount = 0;
     const results = assignment.questions.map((q) => {
-      const { correctIds, chosenIds, isCorrect } = gradeQuestion(q, answers?.[q.id]);
+      const { chosenIds, isCorrect } = gradeQuestion(q, answers?.[q.id]);
       if (isCorrect) correctCount++;
-      return { questionId: q.id, correctOptionIds: correctIds, chosenOptionIds: chosenIds, isCorrect };
+      // correctOptionIds исключен во избежание утечки правильных ответов
+      return { questionId: q.id, chosenOptionIds: chosenIds, isCorrect };
     });
     const total = assignment.questions.length;
     const score = total ? Math.round((correctCount / total) * assignment.maxScore) : 0;
 
-    const previous = existing;
-    const attempts = usedAttempts + 1;
-    await prisma.submission.upsert({
-      where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
-      update: { fileId: null, submittedAt: new Date(), score, comment: null, status: "REVIEWED", attempts, testStartedAt: null },
-      create: { assignmentId: req.params.id, studentId: req.user.id, score, status: "REVIEWED", attempts },
+    const outcome = await userTransaction(req.user.id, async (tx) => {
+      const existing = await tx.submission.findUnique({
+        where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
+      });
+      requireStartedAttempt(existing);
+      const usedAttempts = existing.attempts || 0;
+      if (assignment.maxAttempts && usedAttempts >= assignment.maxAttempts) {
+        throw new HttpError(
+          403,
+          `Urinishlar tugadi (${assignment.maxAttempts} tadan ${usedAttempts} ta ishlatilgan)`
+        );
+      }
+
+      // Vaqti tugagan javob qabul qilinmaydi — urinish esa sarflangan hisoblanadi.
+      if (assignment.timeLimitSec && isExpired(existing?.testStartedAt, assignment.timeLimitSec)) {
+        await tx.submission.update({
+          where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
+          data: {
+            attempts: usedAttempts + 1,
+            testStartedAt: null,
+            ...(existing.score == null ? { score: 0, status: "REVIEWED", submittedAt: new Date() } : {}),
+          },
+        });
+        return { expired: true };
+      }
+
+      const previous = existing;
+      const newAttempts = usedAttempts + 1;
+      await tx.submission.upsert({
+        where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
+        update: { fileId: null, submittedAt: new Date(), score, creditedPoints: score, comment: null, status: "REVIEWED", attempts: newAttempts, testStartedAt: null },
+        create: { assignmentId: req.params.id, studentId: req.user.id, score, creditedPoints: score, status: "REVIEWED", attempts: newAttempts },
+      });
+
+      // Qayta topshirilganda ball farqi qo'shiladi (birinchi marta esa to'liq ball).
+      const pointsDelta = score - (previous?.creditedPoints || 0);
+      if (pointsDelta !== 0) {
+        await tx.user.update({ where: { id: req.user.id }, data: { points: { increment: pointsDelta } } });
+      }
+
+      await auditGrade(tx, req.user.id, req.user.id, assignment.id, "TEST_SUBMIT", previous, { score, attempts: newAttempts });
+      return { attempts: newAttempts };
     });
 
-    // Qayta topshirilganda ball farqi qo'shiladi (birinchi marta esa to'liq ball).
-    const pointsDelta = previous?.status === "REVIEWED" ? score - (previous.score || 0) : score;
-    if (pointsDelta !== 0) {
-      await prisma.user.update({ where: { id: req.user.id }, data: { points: { increment: pointsDelta } } });
-    }
-
+    if (outcome.expired) return res.status(403).json({ error: "Test vaqti tugagan" });
+    const { attempts } = outcome;
     res.json({
       correctCount,
       total,
@@ -440,6 +469,12 @@ router.post(
 router.post(
   "/:id/submit",
   requireRole("STUDENT"),
+  route(async (req, res, next) => {
+    const assignment = await prisma.assignment.findUnique({ where: { id: req.params.id } });
+    if (!assignment) throw new HttpError(404, "Vazifa topilmadi");
+    if (assignment.type !== "FILE" || new Date(assignment.dueDate) < new Date()) throw new HttpError(403, "Bu vazifaga fayl yuborib bo'lmaydi");
+    next();
+  }),
   upload.array("files", 10),
   route(async (req, res) => {
     const uploaded = req.files || [];
@@ -451,41 +486,26 @@ router.post(
     if (assignment.type === "TEST") throw new HttpError(400, "Bu vazifa TEST turida — fayl emas, javoblar yuboriladi");
     if (new Date(assignment.dueDate) < new Date()) throw new HttpError(403, "Vazifa muddati yopilgan");
 
-    const records = [];
-    for (const f of uploaded) {
-      records.push(await createUploadedFileRecord(f, req.user.id));
-    }
-
-    const submission = await prisma.submission.upsert({
-      where: { assignmentId_studentId: { assignmentId: req.params.id, studentId: req.user.id } },
-      // fileId birinchi faylga ishora qilib qoladi — eski yozuvlar bilan
-      // moslik va fayl ruxsatlarini tekshirish shunga tayanadi.
-      update: {
-        fileId: records[0].id,
-        text: text || null,
-        submittedAt: new Date(),
-        score: null,
-        comment: null,
-        status: "NOT_REVIEWED",
-      },
-      create: {
-        assignmentId: req.params.id,
-        studentId: req.user.id,
-        fileId: records[0].id,
-        text: text || null,
-      },
-    });
-
-    // Qayta topshirilsa — oldingi fayllar ro'yxati almashtiriladi.
-    await prisma.submissionFile.deleteMany({ where: { submissionId: submission.id } });
-    await prisma.submissionFile.createMany({
-      data: records.map((file, i) => ({ submissionId: submission.id, fileId: file.id, order: i })),
+    await userTransaction(req.user.id, async (tx) => {
+      const previous = await tx.submission.findUnique({ where: { assignmentId_studentId: { assignmentId: assignment.id, studentId: req.user.id } } });
+      const records = [];
+      for (const f of uploaded) records.push(await createUploadedFileRecord(f, req.user.id, tx));
+      const data = { fileId: records[0].id, text: text || null, submittedAt: new Date(), score: null,
+        creditedPoints: 0, comment: null, status: "NOT_REVIEWED" };
+      const submission = await tx.submission.upsert({
+        where: { assignmentId_studentId: { assignmentId: assignment.id, studentId: req.user.id } },
+        update: data, create: { ...data, assignmentId: assignment.id, studentId: req.user.id },
+      });
+      if (previous?.creditedPoints) await tx.user.update({ where: { id: req.user.id }, data: { points: { decrement: previous.creditedPoints } } });
+      await tx.submissionFile.deleteMany({ where: { submissionId: submission.id } });
+      await tx.submissionFile.createMany({ data: records.map((file, order) => ({ submissionId: submission.id, fileId: file.id, order })) });
+      await auditGrade(tx, req.user.id, req.user.id, submission.id, "RESUBMIT", previous, { score: null, creditedPoints: 0 });
     });
 
     await notifyStaff({
       type: TYPES.SUBMISSION_NEW,
       title: "Yangi javob keldi",
-      body: `${req.user.firstName} ${req.user.lastName} — ${assignment.title} (${records.length} ta fayl)`,
+      body: `${req.user.firstName} ${req.user.lastName} — ${assignment.title} (${uploaded.length} ta fayl)`,
       link: `/teacher/assignments/${assignment.id}`,
     });
 
@@ -502,31 +522,23 @@ router.patch(
     const assignment = await prisma.assignment.findUnique({ where: { id: req.params.id } });
     if (!assignment) throw new HttpError(404, "Vazifa topilmadi");
 
-    const previous = await prisma.submission.findUnique({ where: { id: req.params.subId } });
-    if (!previous) throw new HttpError(404, "Javob topilmadi");
-
+    const target = await prisma.submission.findUnique({ where: { id: req.params.subId } });
+    if (!target || target.assignmentId !== assignment.id) throw new HttpError(404, "Javob topilmadi");
     const numericScore = Number(score);
-    if (Number.isNaN(numericScore)) throw new HttpError(400, "Ball raqam bo'lishi kerak");
+    if (!Number.isFinite(numericScore) || !Number.isInteger(numericScore)) throw new HttpError(400, "Ball butun raqam bo'lishi kerak");
     const clampedScore = Math.max(0, Math.min(numericScore, assignment.maxScore));
-
-    const submission = await prisma.submission.update({
-      where: { id: req.params.subId },
-      data: {
-        score: clampedScore,
-        comment: isEmptyHtml(comment) ? null : sanitizeHtml(comment),
-        status: "REVIEWED",
-      },
+    const submission = await userTransaction(target.studentId, async (tx) => {
+      const previous = await tx.submission.findUnique({ where: { id: target.id } });
+      if (!previous || previous.assignmentId !== assignment.id) throw new HttpError(404, "Javob topilmadi");
+      const updated = await tx.submission.update({ where: { id: previous.id }, data: {
+        score: clampedScore, creditedPoints: clampedScore,
+        comment: isEmptyHtml(comment) ? null : sanitizeHtml(comment), status: "REVIEWED",
+      } });
+      const delta = clampedScore - previous.creditedPoints;
+      if (delta) await tx.user.update({ where: { id: target.studentId }, data: { points: { increment: delta } } });
+      await auditGrade(tx, req.user.id, target.studentId, previous.id, "GRADE", { score: previous.score, creditedPoints: previous.creditedPoints }, { score: clampedScore, creditedPoints: clampedScore });
+      return updated;
     });
-
-    // Talaba ballari umumiy reyting uchun User.points ga qo'shiladi (faqat
-    // qayta baholanmagan holatda — regrade ball qo'shmaydi, farqini qo'shadi)
-    const pointsDelta = previous.status === "REVIEWED" ? clampedScore - (previous.score || 0) : clampedScore;
-    if (pointsDelta !== 0) {
-      await prisma.user.update({
-        where: { id: submission.studentId },
-        data: { points: { increment: pointsDelta } },
-      });
-    }
 
     await notify(submission.studentId, {
       type: TYPES.ASSIGNMENT_GRADED,

@@ -21,6 +21,7 @@ model User {
   university   String?
   email        String    @unique
   points       Int       @default(0)
+  tokenVersion Int       @default(0)
   createdAt    DateTime  @default(now())
   // WebSocket uzilib qolsa ham "onlayn" holati saqlanib qolishi uchun —
   // presence endi faqat xotiradagi Map'ga bog'liq emas (src/lib/presence.js).
@@ -47,6 +48,7 @@ model EmailVerification {
   codeHash  String
   purpose   String
   verified  Boolean  @default(false)
+  consumedAt DateTime?
   expiresAt DateTime
   createdAt DateTime @default(now())
 }
@@ -286,6 +288,7 @@ model Submission {
   // aks holda talaba sahifani yangilab, taymerni qaytadan boshlashi mumkin edi.
   testStartedAt DateTime?
   score         Int?
+  creditedPoints Int @default(0)
   comment       String?
   status        String           @default("NOT_REVIEWED")
   // Bir nechta fayl. `fileId` birinchi faylga ishora qilib qoladi — eski
@@ -415,9 +418,22 @@ model PuzzleProgress {
   puzzleImage   PuzzleImage @relation(fields: [puzzleImageId], references: [id], onDelete: Cascade)
   difficulty    String
   startedAt     DateTime?
+  session       Json?
   bestTimeSec   Int?
   solvedCount   Int         @default(0)
   lastSolvedAt  DateTime?
 
   @@unique([userId, puzzleImageId, difficulty])
+}
+
+model GradeAudit {
+ id String @id @default(cuid())
+ actorId String
+ studentId String
+ targetId String
+ action String
+ before String
+ after String
+ createdAt DateTime @default(now())
+ @@index([studentId, createdAt])
 }

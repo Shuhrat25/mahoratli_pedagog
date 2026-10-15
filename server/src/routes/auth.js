@@ -16,7 +16,8 @@ const { rateLimit } = require("../lib/rateLimit");
 const { HttpError, route } = require("../lib/httpError");
 
 const router = express.Router();
-const isDev = process.env.NODE_ENV !== "production";
+const { userTransaction } = require("../lib/securityTransaction");
+const { disconnectUser } = require("../ws");
 
 // Parolni cheksiz tanlash va birovning pochtasiga cheksiz kod yuborishning
 // oldini oladi (Resend kvotasini ham asraydi).
@@ -36,6 +37,12 @@ const codeLimiterByEmail = rateLimit({
 });
 const verifyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 15, keyPrefix: "verify" });
 const registerLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, keyPrefix: "register" });
+const checkLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  keyPrefix: "check-login",
+  message: "Juda ko'p urinish. 15 daqiqadan so'ng qayta urinib ko'ring.",
+});
 
 function publicUser(user) {
   const { passwordHash, ...rest } = user;
@@ -57,11 +64,7 @@ async function issueCode(email, purpose) {
       console.error("[email-verification] Resend orqali yuborishda xatolik:", err.message);
     }
   }
-  if (!emailSent) {
-    // Resend sozlanmagan yoki yuborish muvaffaqiyatsiz bo'lsa — dev muhitida
-    // kod konsolga va javobga chiqadi, shunda ishlashda davom etish mumkin.
-    console.log(`[email-verification] ${email} (${purpose}) kod: ${code}`);
-  }
+  if (!emailSent) throw new HttpError(503, "Tasdiqlash xatini yuborib bo'lmadi. Keyinroq urinib ko'ring.");
   return { code, emailSent };
 }
 
@@ -90,8 +93,8 @@ router.post(
       return res.json({ ok: true, emailSent: true });
     }
 
-    const { code, emailSent } = await issueCode(email, purpose);
-    res.json({ ok: true, emailSent, ...(isDev && !emailSent ? { devCode: code } : {}) });
+    const { emailSent } = await issueCode(email, purpose);
+    res.json({ ok: true, emailSent });
   })
 );
 
@@ -114,14 +117,16 @@ router.post(
     const ok = await verifyCode(code, record.codeHash);
     if (!ok) throw new HttpError(400, "Kod noto'g'ri");
 
-    await prisma.emailVerification.update({ where: { id: record.id }, data: { verified: true } });
-    const verifiedToken = signVerifiedEmailToken(email, purpose);
+    const claimed = await prisma.emailVerification.updateMany({ where: { id: record.id, verified: false, expiresAt: { gt: new Date() } }, data: { verified: true } });
+    if (claimed.count !== 1) throw new HttpError(409, "Kod allaqachon ishlatilgan");
+    const verifiedToken = signVerifiedEmailToken(email, purpose, record.id);
     res.json({ ok: true, verifiedToken });
   })
 );
 
 router.get(
   "/check-login/:login",
+  checkLoginLimiter,
   route(async (req, res) => {
     const user = await prisma.user.findUnique({ where: { login: req.params.login } });
     res.json({ taken: !!user });
@@ -154,8 +159,10 @@ router.post(
     if (emailTaken) throw new HttpError(409, "Bu pochta bilan foydalanuvchi allaqachon mavjud");
 
     const passwordHash = await hashPassword(password);
-    const user = await prisma.user.create({
-      data: { firstName, lastName, university: university || null, email, login, passwordHash, role: "STUDENT" },
+    const user = await prisma.$transaction(async (tx) => {
+      const claim = await tx.emailVerification.updateMany({ where: { id: payload.verificationId, email, purpose: "REGISTER", verified: true, consumedAt: null }, data: { consumedAt: new Date() } });
+      if (claim.count !== 1) throw new HttpError(400, "Tasdiqlash allaqachon ishlatilgan");
+      return tx.user.create({ data: { firstName, lastName, university: university || null, email, login, passwordHash, role: "STUDENT" } });
     });
 
     setAuthCookie(res, signToken(user));
@@ -183,10 +190,33 @@ router.post(
   })
 );
 
-router.post("/logout", (req, res) => {
-  clearAuthCookie(res);
-  res.json({ ok: true });
-});
+router.post(
+  "/logout",
+  route(async (req, res) => {
+    if (req.user) {
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { tokenVersion: { increment: 1 } },
+      });
+    }
+    if (req.user) disconnectUser(req.user.id);
+    clearAuthCookie(res);
+    res.json({ ok: true });
+  })
+);
+
+router.post(
+  "/logout-all",
+  requireAuth,
+  route(async (req, res) => {
+    await prisma.user.update({
+      where: { id: req.user.id },
+      data: { tokenVersion: { increment: 1 } },
+    });
+    clearAuthCookie(res);
+    res.json({ ok: true });
+  })
+);
 
 router.get("/me", requireAuth, (req, res) => {
   res.json({ user: publicUser(req.user) });
@@ -214,7 +244,12 @@ router.post(
     if (!user) throw new HttpError(404, "Foydalanuvchi topilmadi");
 
     const passwordHash = await hashPassword(newPassword);
-    await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+    await userTransaction(user.id, async (tx) => {
+      const claim = await tx.emailVerification.updateMany({ where: { id: payload.verificationId, email, purpose: "RESET", verified: true, consumedAt: null }, data: { consumedAt: new Date() } });
+      if (claim.count !== 1) throw new HttpError(400, "Tasdiqlash allaqachon ishlatilgan. Yangi kod so'rang.");
+      await tx.user.update({ where: { id: user.id }, data: { passwordHash, tokenVersion: { increment: 1 } } });
+    });
+    disconnectUser(user.id);
     res.json({ ok: true });
   })
 );

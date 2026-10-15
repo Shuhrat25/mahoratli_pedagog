@@ -9,6 +9,11 @@ const { POST_STATUSES } = require("../lib/constants");
 const { notifyAllStudents, TYPES } = require("../lib/notifications");
 
 const router = express.Router();
+async function requireVisiblePost(req) {
+ const post = await prisma.post.findFirst({ where: isStaff(req.user) ? { id: req.params.id } : { id: req.params.id, ...publishedFilter() }, select: { id: true } });
+ if (!post) throw new HttpError(404, "Post topilmadi");
+}
+
 
 const include = {
   author: true,
@@ -268,6 +273,7 @@ router.post(
   "/:id/like",
   requireAuth,
   route(async (req, res) => {
+    await requireVisiblePost(req);
     const existing = await prisma.postLike.findUnique({
       where: { postId_userId: { postId: req.params.id, userId: req.user.id } },
     });
@@ -286,6 +292,7 @@ router.post(
   "/:id/comments",
   requireAuth,
   route(async (req, res) => {
+    await requireVisiblePost(req);
     const { text } = req.body;
     if (!text || !text.trim()) throw new HttpError(400, "Matn talab qilinadi");
     await prisma.comment.create({
@@ -301,8 +308,9 @@ router.delete(
   "/:id/comments/:commentId",
   requireAuth,
   route(async (req, res) => {
+    await requireVisiblePost(req);
     const comment = await prisma.comment.findUnique({ where: { id: req.params.commentId } });
-    if (!comment) throw new HttpError(404, "Izoh topilmadi");
+    if (!comment || comment.postId !== req.params.id) throw new HttpError(404, "Izoh topilmadi");
     if (comment.authorId !== req.user.id && !isStaff(req.user)) throw new HttpError(403, "Ruxsat yo'q");
     await prisma.comment.delete({ where: { id: req.params.commentId } });
     const post = await prisma.post.findUnique({ where: { id: req.params.id }, include });

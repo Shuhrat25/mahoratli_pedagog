@@ -6,6 +6,7 @@ const { isOnline, onlineCount } = require("../lib/presence");
 const { ROLES, validatePassword } = require("../lib/constants");
 const { HttpError, route } = require("../lib/httpError");
 
+const { disconnectUser } = require("../ws");
 const router = express.Router();
 
 function publicUser(user) {
@@ -167,6 +168,7 @@ router.patch(
     }
 
     const { firstName, lastName, university, email, login, role, password } = req.body;
+    if (role !== undefined && !ROLES.includes(role)) throw new HttpError(400, "Noto'g'ri rol");
     if (role !== undefined && !canManageTargetRole(req.user.role, role)) {
       throw new HttpError(403, "Faqat asosiy o'qituvchi teacher rolini belgilay oladi");
     }
@@ -183,9 +185,29 @@ router.patch(
     if (login !== undefined) data.login = login;
     if (role !== undefined) data.role = role;
     if (password) data.passwordHash = await hashPassword(password);
+    if (password || role !== undefined) data.tokenVersion = { increment: 1 };
 
     const user = await prisma.user.update({ where: { id: target.id }, data });
+    if (password || role !== undefined) disconnectUser(target.id);
     res.json({ user: publicUser(user) });
+  })
+);
+
+router.post(
+  "/:id/force-logout",
+  requireRole("ADMIN", "TEACHER"),
+  route(async (req, res) => {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) throw new HttpError(404, "Foydalanuvchi topilmadi");
+    if (!canManageTargetRole(req.user.role, target.role)) {
+      throw new HttpError(403, "Ushbu foydalanuvchini faqat asosiy o'qituvchi boshqara oladi");
+    }
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { tokenVersion: { increment: 1 } },
+    });
+    disconnectUser(target.id);
+    res.json({ ok: true });
   })
 );
 
@@ -200,6 +222,7 @@ router.delete(
     }
     if (target.id === req.user.id) throw new HttpError(400, "O'z hisobingizni o'chira olmaysiz");
     await prisma.user.delete({ where: { id: target.id } });
+    disconnectUser(target.id);
     res.json({ ok: true });
   })
 );

@@ -32,7 +32,7 @@ function buildLayout(rawAspect, target, narrow) {
   const aspect = clamp(rawAspect || 1, 0.5, 2.2);
   const FW = aspect >= 1 ? FRAME_BASE : Math.round(FRAME_BASE * aspect);
   const FH = aspect >= 1 ? Math.round(FRAME_BASE / aspect) : FRAME_BASE;
-  const { rows, cols } = gridFor(target, aspect);
+  const { rows, cols } = gridFor(target, FW / FH);
   const pw = FW / cols;
   const ph = FH / rows;
   const pad = TAB_EXTENT * Math.max(pw, ph);
@@ -125,6 +125,7 @@ export default function JigsawBoard({
   difficultyLabel,
   onReady,
   onComplete,
+  onPlace,
   result,
   resultError,
   onRestart,
@@ -137,8 +138,8 @@ export default function JigsawBoard({
   const placed = useRef([]);
   const elements = useRef([]);
   const drag = useRef(null);
-  const callbacks = useRef({ onReady, onComplete });
-  callbacks.current = { onReady, onComplete };
+  const callbacks = useRef({ onReady, onComplete, onPlace });
+  callbacks.current = { onReady, onComplete, onPlace };
 
   const [board, setBoard] = useState(null);
   const [loadError, setLoadError] = useState("");
@@ -155,7 +156,7 @@ export default function JigsawBoard({
   useEffect(() => {
     let cancelled = false;
     loadImage(imageUrl)
-      .then((img) => {
+      .then(async (img) => {
         if (cancelled) return;
         const narrow = (wrapperRef.current?.clientWidth || 1024) < 640;
         const layout = buildLayout(img.naturalWidth / img.naturalHeight, target, narrow);
@@ -180,10 +181,12 @@ export default function JigsawBoard({
           layout,
           positions.current
         );
+        await callbacks.current.onReady?.({ aspect: layout.FW / layout.FH });
+        if (cancelled) return;
         setBoard({ layout, shapes });
         setOrder(shuffled(shapes.map((s) => s.i)));
         setStartedAt(Date.now());
-        callbacks.current.onReady?.();
+
       })
       .catch((err) => {
         if (!cancelled) setLoadError(err.message);
@@ -255,6 +258,7 @@ export default function JigsawBoard({
 
     positions.current[current.i] = { x: shape.homeX, y: shape.homeY };
     placed.current[current.i] = true;
+    callbacks.current.onPlace?.({ index: current.i, x: shape.c, y: shape.r });
     el?.setAttribute("transform", `translate(${shape.homeX} ${shape.homeY})`);
     // Joyiga tushgan bo'laklar eng pastki qatlamga o'tadi — hali yig'ilmaganlari
     // ramka ustida ham ko'rinib tursin.

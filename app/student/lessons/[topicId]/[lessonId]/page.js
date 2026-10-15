@@ -70,6 +70,7 @@ export default function LessonPage() {
       .startTest(topicId, lesson.id)
       .then((info) => {
         if (cancelled) return;
+        setTopics((prev) => prev?.map((t) => ({ ...t, lessons: t.lessons.map((l) => l.id === lessonId ? { ...l, questions: info.questions || [] } : l) })));
         setEndsAt(info.endsAt);
         setStartError("");
       })
@@ -179,7 +180,10 @@ export default function LessonPage() {
     // Yangi urinish oynasini server ochadi (yuqoridagi effekt qayta ishlaydi).
     topicsApi
       .startTest(topicId, lessonId)
-      .then((info) => setEndsAt(info.endsAt))
+      .then((info) => {
+        setTopics((prev) => prev?.map((t) => ({ ...t, lessons: t.lessons.map((l) => l.id === lessonId ? { ...l, questions: info.questions || [] } : l) })));
+        setEndsAt(info.endsAt);
+      })
       .catch((err) => setStartError(err.message || "Testni boshlab bo'lmadi"));
   }
 

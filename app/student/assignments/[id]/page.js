@@ -68,6 +68,7 @@ export default function StudentAssignmentDetailPage() {
       .startTest(assignment.id)
       .then((info) => {
         if (cancelled) return;
+        setAssignment((prev) => ({ ...prev, questions: info.questions || [] }));
         setEndsAt(info.endsAt);
         setStartError("");
       })

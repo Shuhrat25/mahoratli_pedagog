@@ -27,6 +27,7 @@ function computeLocks(topics, progressByLessonId) {
         done: !!progress?.completed,
         score: progress?.score ?? null,
         attempts: progress?.attempts ?? 0,
+        testStartedAt: progress?.testStartedAt ?? null,
       };
       if (!optional) previousRequiredDone = shaped.done;
       return shaped;

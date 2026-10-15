@@ -15,6 +15,8 @@ export default function TeacherAssignmentDetailPage() {
   const [grading, setGrading] = useState(null);
   const [score, setScore] = useState("");
   const [comment, setComment] = useState("");
+  const [history, setHistory] = useState(null);
+  const [historyError, setHistoryError] = useState("");
 
   function reload() {
     return assignmentsApi.get(id).then(({ assignment }) => setAssignment(assignment));
@@ -57,7 +59,23 @@ export default function TeacherAssignmentDetailPage() {
         </div>
       )}
 
-      <h2 className="mb-2 font-semibold">Ishtirokchilar javoblari</h2>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="font-semibold">Ishtirokchilar javoblari</h2>
+        <button type="button" className="text-sm text-brand-700 hover:underline dark:text-brand-400" onClick={async () => {
+          try { const data = await assignmentsApi.audit({ assignmentId: id }); setHistory(data.entries); setHistoryError(""); }
+          catch (err) { setHistoryError(err.message); }
+        }}>Baholar tarixi</button>
+      </div>
+      {historyError && <p role="alert" className="mb-3 text-sm text-rose-600">{historyError}</p>}
+      <Modal open={history !== null} onClose={() => setHistory(null)} title="Baholar tarixi">
+        {history?.length === 0 && <p className="text-sm text-slate-500">Hali o&apos;zgarishlar yo&apos;q. Avvalgi baholar saqlangan, tarix yangi o&apos;zgarishlardan boshlanadi.</p>}
+        <ul className="space-y-3">{history?.map((entry) => (
+          <li key={entry.id} className="rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800">
+            <p className="font-semibold">{entry.studentName}: {entry.before?.score ?? "—"} → {entry.after?.score ?? "—"}</p>
+            <p className="text-xs text-slate-500">{entry.actorName} · {new Date(entry.createdAt).toLocaleString("uz-UZ")} · {({ GRADE: "Baholash", RESUBMIT: "Qayta topshirish", TEST_SUBMIT: "Test natijasi" })[entry.action] || entry.action}</p>
+          </li>
+        ))}</ul>
+      </Modal>
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[560px] text-left text-sm">
           <thead className="border-b border-slate-100 text-xs uppercase text-slate-500 dark:border-slate-800">

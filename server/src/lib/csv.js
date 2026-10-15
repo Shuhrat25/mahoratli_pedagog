@@ -10,7 +10,10 @@
 const DELIMITER = ";";
 
 function escapeCell(value) {
-  const text = value === null || value === undefined ? "" : String(value);
+  let text = value === null || value === undefined ? "" : String(value);
+  if (/^[=+\-@\t\r]/.test(text)) {
+    text = "'" + text;
+  }
   if (text.includes('"') || text.includes(DELIMITER) || /[\r\n]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }

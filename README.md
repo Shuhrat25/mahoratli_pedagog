@@ -329,3 +329,22 @@ CSV escaping, password rules, Prisma error mapping and the rate limiter.
   only. Adding them needs answer storage plus a manual grading flow, i.e. its own feature.
 - Rate limiting and WebSocket presence are per-process. On a single instance (Render free
   tier) that is correct; scaling to several instances would need Redis.
+
+
+### Security and grade integrity (October 2026)
+
+- Test submissions require an active server-side attempt, including unlimited tests. Replays are rejected; expired attempts are consumed atomically.
+- A PostgreSQL account-row lock serializes test starts, submissions, grading, puzzle rewards and student upload quota checks. Submission.creditedPoints tracks each work's contribution: resubmitting removes the old contribution, and regrading applies only the difference.
+- GradeAudit records the actor, student, target and old/new grade values. Staff can view Baholar tarixi on the assignment page or GET /api/assignments/audit. History starts after this migration; old changes cannot be reconstructed.
+- File access checks published posts, forum ownership and unlocked lessons. Exact image references preserve existing rich text; arbitrary IDs in text do not grant access. Existing linked files are retained.
+- Reset/registration confirmations are one-use DB-backed tokens. Verification codes are never returned by the API or logged when mail fails; registration/reset need a working mail service.
+- Legacy unversioned cookies are rejected. Password/role changes and forced logout revoke sessions; sockets are closed immediately on this instance and checked every 30 seconds on other instances. Users with old cookies must sign in again.
+- Student uploads remain 10 MiB per file, at most 10 files per submission. Uploads are limited to 20 requests/hour/account and 500 MiB stored/account by default (STUDENT_UPLOAD_QUOTA_MB). The quota is checked atomically. Teacher/admin file size remains unlimited. Failed uploads are cleaned up; unattached student files older than seven days are swept daily. Limits based on memory apply per API process.
+- Puzzle sessions record server-issued pieces and validate placements before accepting completion. A simple start/wait/solve request no longer earns points. This is not proof of human interaction: automated solvers remain possible. Rewards are once per image across all difficulties.
+- Apply server/prisma/migrations/20261006090000_security_integrity before deploying the new API; generate Prisma Client afterward. Existing scores and total points are preserved. The migration initializes contributions from current reviewed scores; it cannot infer historical overcounting or teacher-adjusted puzzle rewards.
+
+#### Backups
+
+From server/, run npm run backup with PostgreSQL client tools available (pg_dump or PG_DUMP_PATH). It saves a custom-format database dump and a copy of uploads/ in server/backups/<timestamp>; this directory is ignored by Git. pg_dump must support the server's PostgreSQL version. Credentials are passed through environment variables, never command arguments. For a consistent database/files snapshot, pause writes during the backup. Keep an encrypted off-host copy with restricted access and test recovery in an isolated database using pg_restore plus the uploads directory. Do not run seed against a working database to restore data.
+
+This command does not configure scheduled hosting backups. Configure retention, off-host storage and the hosting provider's automated backup policy before public launch; Render ephemeral uploads still require persistent storage. A backup on the same host alone does not protect against host loss.

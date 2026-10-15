@@ -103,6 +103,10 @@ const server = http.createServer(app);
 attachWebSocketServer(server);
 startReminders();
 
+const { cleanupStudentUploads } = require('./lib/uploadCleanup');
+const cleanupTimer = setInterval(() => cleanupStudentUploads().catch((err) => console.error('[upload-cleanup]', err.code || err.name)), 24 * 3600000);
+cleanupTimer.unref();
+
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
   console.log(`Mahoratli pedagog API http://localhost:${PORT} portida ishga tushdi`);

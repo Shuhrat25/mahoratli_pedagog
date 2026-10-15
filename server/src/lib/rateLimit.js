@@ -11,10 +11,8 @@
 const buckets = new Map();
 
 function clientKey(req) {
-  // Render/Vercel proksisi ortida haqiqiy IP shu sarlavhada keladi.
-  const forwarded = req.headers["x-forwarded-for"];
-  const ip = (Array.isArray(forwarded) ? forwarded[0] : forwarded || "").split(",")[0].trim();
-  return ip || req.socket?.remoteAddress || "unknown";
+  // express 'trust proxy' orqali olingan ishonchli mijoz IP'si
+  return req.ip || req.socket?.remoteAddress || "unknown";
 }
 
 function rateLimit({ windowMs, max, keyPrefix = "", message, key }) {

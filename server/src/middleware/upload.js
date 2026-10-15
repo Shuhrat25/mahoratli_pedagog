@@ -9,6 +9,11 @@ const {
 } = require("../lib/constants");
 const { HttpError } = require("../lib/httpError");
 
+const prisma = require('../db');
+const { rateLimit } = require('../lib/rateLimit');
+const { removeUnreferencedUpload } = require('../lib/uploadCleanup');
+const studentLimiter = rateLimit({ windowMs: 3600000, max: 20, keyPrefix: 'uploads', key: (req) => req.user.id });
+const STUDENT_QUOTA = Math.max(100, Number(process.env.STUDENT_UPLOAD_QUOTA_MB) || 500) * 1024 * 1024;
 const UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads");
 
 const storage = multer.diskStorage({
@@ -52,7 +57,7 @@ function fileFilter(req, file, cb) {
 const studentUpload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: MAX_STUDENT_UPLOAD_BYTES, fieldSize: MAX_FIELD_BYTES },
+  limits: { fileSize: MAX_STUDENT_UPLOAD_BYTES, fieldSize: MAX_FIELD_BYTES, fields: 20, parts: 40 },
 });
 
 const staffUpload = multer({
@@ -67,9 +72,37 @@ function pick(req) {
 
 // Multer chegaralari instans yaratilganda belgilanadi, biz esa ularni
 // so'rovdagi rolga qarab tanlashimiz kerak — shuning uchun o'rovchi.
+function handleUpload(kind, field, maxCount) {
+  return (req, res, next) => {
+    const run = async () => {
+      const staff = isStaff(req.user);
+      if (!staff) {
+        const usage = await prisma.uploadedFile.aggregate({ where: { uploadedById: req.user.id }, _sum: { size: true } });
+        if ((usage._sum.size || 0) >= STUDENT_QUOTA) throw new HttpError(413, "Fayllar uchun umumiy joy tugadi. O'qituvchiga murojaat qiling.");
+      }
+      const parser = kind === 'single' ? pick(req).single(field) : pick(req).array(field, maxCount);
+      parser(req, res, (err) => {
+        const files = req.file ? [req.file] : req.files || [];
+        res.once('finish', () => {
+          if (res.statusCode >= 400) for (const f of files) removeUnreferencedUpload(f.filename).catch(() => {});
+        });
+        if (err) return next(err);
+        (async () => {
+          if (!staff) {
+            const usage = await prisma.uploadedFile.aggregate({ where: { uploadedById: req.user.id }, _sum: { size: true } });
+            if ((usage._sum.size || 0) + files.reduce((sum, f) => sum + f.size, 0) > STUDENT_QUOTA) throw new HttpError(413, "Fayllar uchun umumiy joy tugadi");
+          }
+          next();
+        })().catch(next);
+      });
+    };
+    if (isStaff(req.user)) run().catch(next);
+    else studentLimiter(req, res, () => run().catch(next));
+  };
+}
 const upload = {
-  single: (field) => (req, res, next) => pick(req).single(field)(req, res, next),
-  array: (field, maxCount) => (req, res, next) => pick(req).array(field, maxCount)(req, res, next),
+  single: (field) => handleUpload('single', field),
+  array: (field, maxCount) => handleUpload('array', field, maxCount),
 };
 
 module.exports = { upload, UPLOAD_DIR, isStaff };

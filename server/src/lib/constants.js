@@ -31,7 +31,7 @@ const STUDENT_ALLOWED_EXTENSIONS = [
   ".pdf", ".doc", ".docx", ".odt", ".rtf", ".txt",
   ".xls", ".xlsx", ".ods", ".csv",
   ".ppt", ".pptx", ".odp",
-  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".svg",
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic",
   ".mp3", ".wav", ".m4a", ".ogg",
   ".mp4", ".mov", ".webm",
   ".zip", ".rar", ".7z",
