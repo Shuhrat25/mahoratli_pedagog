@@ -1,5 +1,7 @@
 # Mahoratli pedagog
 
+[Открыть демо](https://mahoratli-pedagog.vercel.app/)
+
 **Mahoratli pedagog** ("Skilled educator") is a learning platform for future primary-school
 teachers. It combines a blog-style news feed, structured lessons with auto-graded tests,
 assignments with file submissions, and a forum — for two roles: **teacher/admin** and
@@ -172,7 +174,7 @@ The app runs at `http://localhost:3000`.
 | `NODE_ENV` | `development` or `production` — also controls cross-site cookie settings |
 | `RESEND_API_KEY` | Resend API key for sending verification emails |
 | `EMAIL_FROM` | Sender address (must be on a domain verified in Resend) |
-| `EMAIL_SENDING_ENABLED` | `"true"` to actually send emails; otherwise codes are returned in the API response for on-screen display (useful before a domain is verified) |
+| `EMAIL_SENDING_ENABLED` | `"true"` to actually send emails; otherwise verification emails cannot be sent; current auth routes do not return verification codes to the client |
 
 **`.env.local`** (frontend root)
 
@@ -348,3 +350,15 @@ CSV escaping, password rules, Prisma error mapping and the rate limiter.
 From server/, run npm run backup with PostgreSQL client tools available (pg_dump or PG_DUMP_PATH). It saves a custom-format database dump and a copy of uploads/ in server/backups/<timestamp>; this directory is ignored by Git. pg_dump must support the server's PostgreSQL version. Credentials are passed through environment variables, never command arguments. For a consistent database/files snapshot, pause writes during the backup. Keep an encrypted off-host copy with restricted access and test recovery in an isolated database using pg_restore plus the uploads directory. Do not run seed against a working database to restore data.
 
 This command does not configure scheduled hosting backups. Configure retention, off-host storage and the hosting provider's automated backup policy before public launch; Render ephemeral uploads still require persistent storage. A backup on the same host alone does not protect against host loss.
+
+## Basic application security
+
+Implemented protections include server-side role and ownership checks, password hashing, httpOnly auth cookies, session revocation using `tokenVersion`, and WebSocket session/origin checks. Login, registration, email verification and student uploads have rate limits. Rich text is sanitized on the server; uploads have extension, size and student quota checks and permission-checked downloads. CSV export escapes spreadsheet formula prefixes.
+
+Tests and grading use server-side timing/attempt checks, transactions, one-time submission rules and an audit trail for grade changes. Verification tokens are purpose-bound and consumed once. These are basic application-hardening measures, not a claim of complete protection or an independent penetration test. The rate limiter is held in one process's memory.
+
+Security and regression tests: `cd server && npm test` (run from a full checkout, since tests also import frontend helpers from `lib/`).
+
+### Disposable hosted demo
+
+The public deployment uses a disposable demo database. On a fresh demo database only, `DEMO_SEED=true` enables `node scripts/seed-if-empty.js` after migrations; it skips seeding if users already exist. Do not run the original destructive seed against a database with needed data. Free Render database/storage limits make this deployment suitable for demonstrations; persistent production hosting is a separate setup.
