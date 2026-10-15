@@ -84,7 +84,7 @@ cannot touch teacher accounts.
 |---|---|
 | Frontend | Next.js 14 (App Router), React 18, Tailwind CSS |
 | Backend | Node.js, Express, Prisma ORM |
-| Database | SQLite (development) → PostgreSQL (production, no schema changes needed) |
+| Database | PostgreSQL (current schema and checked-in migrations) |
 | Auth | JWT in an httpOnly cookie |
 | Realtime | WebSocket (`ws`) for online/offline presence |
 | File uploads | Multer, served through a permission-checked download route |
@@ -124,8 +124,8 @@ mahoratli_pedagog/
 ```bash
 cd server
 npm install
-cp .env.example .env   # fill in JWT_SECRET at minimum
-npx prisma migrate dev
+cp .env.example .env   # set DATABASE_URL for PostgreSQL and JWT_SECRET
+npx prisma migrate deploy
 npm run seed
 npm run dev
 ```
@@ -167,7 +167,7 @@ The app runs at `http://localhost:3000`.
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | Prisma connection string (`file:./dev.db` for SQLite, or a `postgres://...` URL) |
+| `DATABASE_URL` | PostgreSQL connection string for the current Prisma provider |
 | `JWT_SECRET` | Secret used to sign auth cookies |
 | `PORT` | API port (default `4000`) |
 | `CLIENT_ORIGIN` | Comma-separated list of allowed frontend origins for CORS, no trailing slash (e.g. `http://localhost:3000,https://your-app.vercel.app`) |
@@ -226,10 +226,7 @@ the proxy.
 > database). Also keep `prisma/migrations/migration_lock.toml` in sync with the schema's
 > `provider` — a mismatch fails the next `migrate deploy` with error `P3019`.
 
-> **SQLite vs PostgreSQL:** the schema was written without native enums specifically so
-> switching `provider` in `server/prisma/schema.prisma` between `sqlite` and `postgresql`
-> needs no other model changes — only the migration history has to match whichever provider
-> is current (see above).
+> **Database provider:** the current project uses PostgreSQL and PostgreSQL migrations. An old SQLite setup is not compatible without deliberate schema and migration changes.
 
 ## Rich text and HTML safety
 
@@ -325,8 +322,7 @@ CSV escaping, password rules, Prisma error mapping and the rate limiter.
 ## Known limitations
 
 - Email sending is feature-flagged off by default (`EMAIL_SENDING_ENABLED=false`) until a
-  custom domain is verified with Resend — until then, verification codes are shown
-  on-screen instead of emailed.
+  custom domain is verified with Resend. Registration and reset require working email delivery; verification codes are not returned to the browser.
 - Open-ended (free-text) test questions are not supported — tests are multiple choice
   only. Adding them needs answer storage plus a manual grading flow, i.e. its own feature.
 - Rate limiting and WebSocket presence are per-process. On a single instance (Render free
